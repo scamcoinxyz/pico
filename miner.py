@@ -2,13 +2,17 @@ import hashlib as hlib
 from sympy import factorint
 from functools import reduce
 
-from core import Block, h_diff_shift
+from core import Blockchain, Block, h_diff_shift
 
 
 # fake data
+chain = Blockchain('0.1')
+
 block=Block(id=0, h_diff=4, v_diff=5)
 block.add_trans('A', 'B', 10)
 block.add_trans('B', 'C', 20)
+
+chain.add_block(block)
 
 # utils
 def primes_int(factors):
@@ -52,8 +56,6 @@ def mine(block):
 
 # miner
 # res = mine(block)
-
-print(block.base_to_json())
-# print(block.to_json())
-# print(block.to_json_with_hash())
 # print(f'solved: reward {block.reward} pico')
+
+print(chain.to_json_with_hash())
