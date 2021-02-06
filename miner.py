@@ -2,7 +2,7 @@ import hashlib as hlib
 from sympy import factorint
 from functools import reduce
 
-from core import User, Blockchain, Block
+from core import User, Blockchain, Block, Invoice, Payment, Message
 
 
 # fake data
@@ -15,8 +15,9 @@ user1 = User()
 user1.create('1234')
 
 block=Block(id=0, h_diff=16, v_diff=5)
-block.add_trans(user0, user1.get_keys()['pub'], 10)
-block.add_trans(user1, user0.get_keys()['pub'], 5)
+block.add_trans(Message(user1, user0.get_pub(), 'Hello! Please give me 5-10 picocoins.'))
+block.add_trans(Invoice(user1, user0.get_pub(), 5))
+block.add_trans(Payment(user0, user1.get_pub(), 10))
 
 
 # utils

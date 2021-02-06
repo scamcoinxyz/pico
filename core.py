@@ -1,6 +1,7 @@
 import json
 import base64
 import hashlib as hlib
+from abc import ABC, abstractmethod
 from datetime import datetime as dt
 
 from ecdsa import SigningKey, VerifyingKey, SECP256k1
@@ -21,6 +22,12 @@ class User:
     def get_keys(self):
         return {'priv': base64.b64encode(self.priv.to_string()).decode(), 'pub': base64.b64encode(self.pub.to_string()).decode()}
 
+    def get_pub(self):
+        return base64.b64encode(self.pub.to_string()).decode()
+    
+    def get_priv(self):
+        return base64.b64encode(self.priv.to_string()).decode()
+
     def sign(self, msg):
         h = hlib.sha3_256(msg).digest()
         return base64.b64encode(self.priv.sign(h)).decode()
@@ -34,20 +41,15 @@ class User:
         return True
 
 
-class Transaction:
-    def __init__(self, user, to_adr, amount):
-        self.from_adr = user.get_keys()['pub']
+class Transaction(ABC):
+    def __init__(self, user, to_adr):
+        self.from_adr = user.get_pub()
         self.to_adr = to_adr
-        self.amount = amount
         self.sign = user.sign(self.to_json().encode())
 
+    @abstractmethod
     def to_json(self):
-        data = {
-            "from": self.from_adr,
-            "to": self.to_adr,
-            "amnt": self.amount
-        }
-        return json.dumps(data)
+        pass
 
     def to_json_with_sign(self):
         data = json.loads(self.to_json())
@@ -57,6 +59,53 @@ class Transaction:
     def hash(self):
         return hlib.sha3_256(self.to_json_with_sign().encode('ascii'))
 
+
+class Invoice(Transaction):
+    def __init__(self, user, to_adr, amount):
+        self.amount = amount
+        super().__init__(user, to_adr)
+
+    def to_json(self):
+        data = {
+            "from": self.from_adr,
+            "to": self.to_adr,
+            "act": {
+                "invoice": self.amount
+            },
+        }
+        return json.dumps(data)
+
+
+class Payment(Transaction):
+    def __init__(self, user, to_adr, amount):
+        self.amount = amount
+        super().__init__(user, to_adr)
+
+    def to_json(self):
+        data = {
+            "from": self.from_adr,
+            "to": self.to_adr,
+            "act": {
+                "pay": self.amount
+            },
+        }
+        return json.dumps(data)
+
+
+class Message(Transaction):
+    def __init__(self, user, to_adr, msg):
+        self.msg = msg
+        super().__init__(user, to_adr)
+
+    def to_json(self):
+        data = {
+            "from": self.from_adr,
+            "to": self.to_adr,
+            "act": {
+                "msg": self.msg
+            },
+        }
+        return json.dumps(data)
 
 class Block:
     def __init__(self, id, h_diff, v_diff):
@@ -70,8 +119,8 @@ class Block:
         self.v_diff = v_diff
         self.reward = 250 / (2 ** h_diff)
 
-    def add_trans(self, from_adr, to_adr, amount):
-        self.trans.append(Transaction(from_adr, to_adr, amount))
+    def add_trans(self, trans):
+        self.trans.append(trans)
 
     def add_pow(self, num, factors):
         self.pow[num] = factors
