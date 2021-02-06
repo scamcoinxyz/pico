@@ -13,3 +13,7 @@ Features:
 Notes:
 1. Cores count has no advantage. Single core compute power is more important.
 2. `Horizontal` difficulty for factorization and `vertical` for recurse depth.
+
+Dependencies:
+* [ecdsa](https://pypi.org/project/ecdsa/)
+* [sympy](https://pypi.org/project/sympy/)
