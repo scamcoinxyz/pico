@@ -1,15 +1,45 @@
 import json
+import base64
 import hashlib as hlib
 from datetime import datetime as dt
 
+from ecdsa import SigningKey, VerifyingKey, SECP256k1
 
-h_diff_shift = 16
+class User:
+    def __init__(self):
+        self.pub = None
+        self.priv = None
+
+    def create(self, password):
+        self.priv = SigningKey.generate(curve=SECP256k1)
+        self.pub = self.priv.get_verifying_key()
+
+    def login(self, priv_key):
+        self.priv = SigningKey.from_string(base64.b64decode(priv_key), curve=SECP256k1)
+        self.pub = self.priv.get_verifying_key()
+
+    def get_keys(self):
+        return {'priv': base64.b64encode(self.priv.to_string()).decode(), 'pub': base64.b64encode(self.pub.to_string()).decode()}
+
+    def sign(self, msg):
+        h = hlib.sha3_256(msg).digest()
+        return base64.b64encode(self.priv.sign(h)).decode()
+
+    def verify(self, msg, sign):
+        h = hlib.sha3_256(msg).digest()
+        try:
+            self.pub.verify(base64.b64decode(sign), h)
+        except:
+            return False
+        return True
+
 
 class Transaction:
-    def __init__(self, from_adr, to_adr, amount):
-        self.from_adr = from_adr
+    def __init__(self, user, to_adr, amount):
+        self.from_adr = user.get_keys()['pub']
         self.to_adr = to_adr
         self.amount = amount
+        self.sign = user.sign(self.to_json().encode())
 
     def to_json(self):
         data = {
@@ -19,8 +49,13 @@ class Transaction:
         }
         return json.dumps(data)
 
+    def to_json_with_sign(self):
+        data = json.loads(self.to_json())
+        data['sign'] = self.sign
+        return json.dumps(data)
+
     def hash(self):
-        return hlib.sha3_256(self.to_json().encode('ascii'))
+        return hlib.sha3_256(self.to_json_with_sign().encode('ascii'))
 
 
 class Block:
@@ -33,7 +68,7 @@ class Block:
 
         self.h_diff = h_diff
         self.v_diff = v_diff
-        self.reward = 100 / (2 ** h_diff)
+        self.reward = 250 / (2 ** h_diff)
 
     def add_trans(self, from_adr, to_adr, amount):
         self.trans.append(Transaction(from_adr, to_adr, amount))
@@ -47,7 +82,7 @@ class Block:
             "time": str(self.time),
             "h_diff": self.h_diff,
             "v_diff": self.v_diff,
-            "trans": [json.loads(t.to_json()) for t in self.trans]
+            "trans": [json.loads(t.to_json_with_sign()) for t in self.trans]
         }
         return json.dumps(data)
 
