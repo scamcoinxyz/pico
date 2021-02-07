@@ -6,6 +6,10 @@ from datetime import datetime as dt
 
 from ecdsa import SigningKey, VerifyingKey, SECP256k1
 
+
+h_diff_init = 14
+
+
 class User:
     def __init__(self):
         self.pub = None
@@ -50,6 +54,10 @@ class Transaction(ABC):
     @abstractmethod
     def to_json(self):
         pass
+
+    # @abstractmethod
+    # def from_json(self):
+    #     pass
 
     def to_json_with_sign(self):
         data = json.loads(self.to_json())
@@ -117,7 +125,7 @@ class Block:
 
         self.h_diff = h_diff
         self.v_diff = v_diff
-        self.reward = 250 / (2 ** h_diff)
+        self.reward = 2 ** (8 - 8 * (h_diff - h_diff_init) / 50)
 
     def add_trans(self, trans):
         self.trans.append(trans)
@@ -168,6 +176,10 @@ class Blockchain:
         }
         return json.dumps(data)
 
+    # def from_json(self):
+    #     with open("data_file.json", "r") as read_file:
+    #         data = json.load(read_file)
+
     def to_json_with_hash(self):
         data = json.loads(self.to_json())
         data['hash'] = self.hash().hexdigest()
@@ -175,3 +187,8 @@ class Blockchain:
 
     def hash(self):
         return hlib.sha3_256(self.to_json().encode('ascii'))
+
+
+class Core:
+    def __init__(self):
+        pass

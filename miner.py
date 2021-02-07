@@ -1,5 +1,5 @@
 import hashlib as hlib
-from sympy import factorint
+from sympy.ntheory import factorint
 from functools import reduce
 
 from core import User, Blockchain, Block, Invoice, Payment, Message
@@ -14,8 +14,8 @@ user0.login(b'+QxFNyz+6pjsy5IGc4l+/Fs3DvR0t1HK77TEp9BQ30k=')
 user1 = User()
 user1.create('1234')
 
-block=Block(id=0, h_diff=16, v_diff=5)
-block.add_trans(Message(user1, user0.get_pub(), 'Hello! Please give me 5-10 picocoins.'))
+block=Block(id=0, h_diff=14, v_diff=256)
+block.add_trans(Message(user1, user0.get_pub(), 'Hello!'))
 block.add_trans(Invoice(user1, user0.get_pub(), 5))
 block.add_trans(Payment(user0, user1.get_pub(), 10))
 
@@ -53,7 +53,7 @@ def mine(block):
         num, factors = mine_h(blk, block.h_diff)
 
         if mine_check_h(blk, factors, block.h_diff):
-            print(f'solved {i}/{block.v_diff}')
+            print(f'solved {i + 1}/{block.v_diff}')
             block.add_pow(num, factors)
             blk = block.to_json().encode('ascii')
     return block.pow
