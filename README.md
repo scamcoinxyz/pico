@@ -201,5 +201,5 @@ other block solvers reward: (first solver reward) / 1000000
 
 ```
 max supply: sum(10000 * 2 ^ (8 - 8 * (i - 14) / 50), i: 14..64) + 10% ~ 26731665 coins
-max blocks count: 10000 * 64 = 640000 blocks
+max blocks count: 10000 * (64 - 14) = 500000 blocks
 ```

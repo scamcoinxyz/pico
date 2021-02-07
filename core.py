@@ -1,6 +1,7 @@
 import json
 import base64
 import hashlib as hlib
+from functools import reduce
 from abc import ABC, abstractmethod
 from datetime import datetime as dt
 
@@ -15,13 +16,21 @@ class User:
         self.pub = None
         self.priv = None
 
-    def create(self, password):
-        self.priv = SigningKey.generate(curve=SECP256k1)
-        self.pub = self.priv.get_verifying_key()
+    @staticmethod
+    def create(password):
+        user = User()
+        user.priv = SigningKey.generate(curve=SECP256k1)
+        user.pub = user.priv.get_verifying_key()
 
-    def login(self, priv_key):
-        self.priv = SigningKey.from_string(base64.b64decode(priv_key), curve=SECP256k1)
-        self.pub = self.priv.get_verifying_key()
+        return user
+
+    @staticmethod
+    def login(priv_key):
+        user = User()
+        user.priv = SigningKey.from_string(base64.b64decode(priv_key), curve=SECP256k1)
+        user.pub = user.priv.get_verifying_key()
+
+        return user
 
     def get_keys(self):
         return {'priv': base64.b64encode(self.priv.to_string()).decode(), 'pub': base64.b64encode(self.pub.to_string()).decode()}
@@ -115,13 +124,51 @@ class Message(Transaction):
         }
         return json.dumps(data)
 
+class ProofOfWork:
+    def __init__(self, block):
+        self.block = block
+        self.pow = {}
+
+    @staticmethod
+    def _primes_int(factors):
+        return reduce(lambda prev, factor: prev * (factor[0] ** factor[1]), factors.items(), 1)
+
+    def add_pow(self, num, factors):
+        self.pow[num] = factors
+
+    def extract(self, i):
+        data = {
+            "base": json.loads(self.block.base_to_json()),
+            "pow": {n: f for n, f in list(self.pow.items())[0:i]}
+        }
+        blk = json.dumps(data).encode('ascii')
+
+        hash = hlib.sha3_256(blk)
+        num = int.from_bytes(hash.digest()[0:self.block.h_diff], byteorder='little')
+
+        return (num, hash)
+
+    def work_check_h(self, i):
+        num, _ = self.extract(i)
+        factors = list(self.pow.items())[i][1]
+
+        if num == self._primes_int(factors):
+            return True
+        return False
+
+    def work_check(self):
+        for i in range(self.block.v_diff):
+            if not self.work_check_h(i):
+                return False
+        return True
+
+
 class Block:
     def __init__(self, id, h_diff, v_diff):
         self.id = id
         self.time = dt.utcnow()
         self.trans = []
-        self.pow = {}
-        self.completed = False
+        self.pow = ProofOfWork(self)
 
         self.h_diff = h_diff
         self.v_diff = v_diff
@@ -131,7 +178,10 @@ class Block:
         self.trans.append(trans)
 
     def add_pow(self, num, factors):
-        self.pow[num] = factors
+        self.pow.add_pow(num, factors)
+
+    def work_check(self):
+        return self.pow.work_check()
 
     def base_to_json(self):
         data = {
@@ -146,7 +196,7 @@ class Block:
     def to_json(self):
         data = {
             "base": json.loads(self.base_to_json()),
-            "pow": self.pow
+            "pow": self.pow.pow
         }
         return json.dumps(data)
 
