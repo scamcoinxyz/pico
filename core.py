@@ -134,6 +134,11 @@ class Transaction(ABC):
         data['sign'] = self.sign
         return json.dumps(data)
 
+    def to_json_with_hash(self):
+        data = json.loads(self.to_json_with_sign())
+        data['hash'] = self.hash().hexdigest()
+        return json.dumps(data)
+
     def hash(self):
         return hlib.sha3_256(self.to_json_with_sign().encode('ascii'))
 
@@ -234,7 +239,7 @@ class Block:
 
         self.h_diff = h_diff
         self.v_diff = v_diff
-        self.prev_hash = prev_block_hash
+        self.prev = prev_block_hash
         self.reward = 2 ** (8 - 8 * (h_diff - h_diff_init) / 50)
 
     def add_trans(self, trans):
@@ -250,10 +255,10 @@ class Block:
         data = {
             "id": self.id,
             "time": str(self.time),
-            "prev_hash": self.prev_hash,
+            "prev": self.prev,
             "h_diff": self.h_diff,
             "v_diff": self.v_diff,
-            "trans": [json.loads(t.to_json_with_sign()) for t in self.trans]
+            "trans": [json.loads(t.to_json_with_hash()) for t in self.trans]
         }
         return json.dumps(data)
 

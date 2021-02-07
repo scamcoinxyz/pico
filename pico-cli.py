@@ -30,10 +30,11 @@ if __name__ == '__main__':
     block.add_trans(Invoice(user2, user1.get_pub(), 5, '1234'))
 
     chain = Blockchain('0.1')
-    chain.add_block(block)
 
     miner = Miner(block)
     miner.work()
+
+    chain.add_block(block)
 
     print(block.pow.work_check())
     print(chain.to_json_with_hash())
