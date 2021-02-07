@@ -62,6 +62,19 @@ class User:
 
         return user
 
+    @staticmethod
+    def from_json(json_data, password):
+        data = json.loads(json_data)
+
+        expected_hash = data['hash']
+        del data['hash']
+
+        hash = hlib.sha3_256(json.dumps(data).encode('ascii')).hexdigest()
+
+        if hash != expected_hash:
+            raise json.JSONDecodeError('Invalid hash!', json_data, 0)
+        return User.login(data['priv'], password)
+
     def get_pub(self):
         return base58.b58encode(self.pub.to_string()).decode()
 
@@ -85,6 +98,21 @@ class User:
         except:
             return False
         return True
+
+    def to_json(self):
+        data = {
+            'pub': self.get_pub(),
+            'priv': self.get_priv_ept()
+        }
+        return json.dumps(data)
+
+    def to_json_with_hash(self):
+        data = json.loads(self.to_json())
+        data['hash'] = self.hash().hexdigest()
+        return json.dumps(data)
+
+    def hash(self):
+        return hlib.sha3_256(self.to_json().encode('ascii'))
 
 
 class Transaction(ABC):
@@ -198,7 +226,7 @@ class ProofOfWork:
 
 
 class Block:
-    def __init__(self, id, h_diff, v_diff):
+    def __init__(self, id, h_diff, v_diff, prev_block_hash):
         self.id = id
         self.time = dt.utcnow()
         self.trans = []
@@ -206,6 +234,7 @@ class Block:
 
         self.h_diff = h_diff
         self.v_diff = v_diff
+        self.prev_hash = prev_block_hash
         self.reward = 2 ** (8 - 8 * (h_diff - h_diff_init) / 50)
 
     def add_trans(self, trans):
@@ -221,6 +250,7 @@ class Block:
         data = {
             "id": self.id,
             "time": str(self.time),
+            "prev_hash": self.prev_hash,
             "h_diff": self.h_diff,
             "v_diff": self.v_diff,
             "trans": [json.loads(t.to_json_with_sign()) for t in self.trans]
