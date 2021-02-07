@@ -3,7 +3,7 @@ from core import Block
 
 
 class Miner:
-    def __init__(self, block):
+    def __init__(self, block=None):
         self.set_block(block)
 
     def set_block(self, block):

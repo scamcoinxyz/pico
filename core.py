@@ -99,15 +99,15 @@ class User:
             return False
         return True
 
-    def to_json(self):
+    def to_json(self, indent=None):
         data = {
             'pub': self.get_pub(),
             'priv': self.get_priv_ept()
         }
-        return json.dumps(data)
+        return json.dumps(data, indent=indent)
 
-    def to_json_with_hash(self):
-        data = json.loads(self.to_json())
+    def to_json_with_hash(self, indent=None):
+        data = json.loads(self.to_json(indent))
         data['hash'] = self.hash().hexdigest()
         return json.dumps(data)
 
@@ -122,20 +122,20 @@ class Transaction(ABC):
         self.sign = user.sign(self.to_json().encode(), password)
 
     @abstractmethod
-    def to_json(self):
+    def to_json(self, indent=None):
         pass
 
     # @abstractmethod
     # def from_json(self):
     #     pass
 
-    def to_json_with_sign(self):
-        data = json.loads(self.to_json())
+    def to_json_with_sign(self, indent=None):
+        data = json.loads(self.to_json(indent))
         data['sign'] = self.sign
         return json.dumps(data)
 
-    def to_json_with_hash(self):
-        data = json.loads(self.to_json_with_sign())
+    def to_json_with_hash(self, indent=None):
+        data = json.loads(self.to_json_with_sign(indent))
         data['hash'] = self.hash().hexdigest()
         return json.dumps(data)
 
@@ -148,7 +148,7 @@ class Invoice(Transaction):
         self.amount = amount
         super().__init__(user, to_adr, password)
 
-    def to_json(self):
+    def to_json(self, indent=None):
         data = {
             "from": self.from_adr,
             "to": self.to_adr,
@@ -156,7 +156,7 @@ class Invoice(Transaction):
                 "invoice": self.amount
             },
         }
-        return json.dumps(data)
+        return json.dumps(data, indent=indent)
 
 
 class Payment(Transaction):
@@ -164,7 +164,7 @@ class Payment(Transaction):
         self.amount = amount
         super().__init__(user, to_adr, password)
 
-    def to_json(self):
+    def to_json(self, indent=None):
         data = {
             "from": self.from_adr,
             "to": self.to_adr,
@@ -172,7 +172,7 @@ class Payment(Transaction):
                 "pay": self.amount
             },
         }
-        return json.dumps(data)
+        return json.dumps(data, indent=indent)
 
 
 class Message(Transaction):
@@ -180,7 +180,7 @@ class Message(Transaction):
         self.msg = msg
         super().__init__(user, to_adr, password)
 
-    def to_json(self):
+    def to_json(self, indent=None):
         data = {
             "from": self.from_adr,
             "to": self.to_adr,
@@ -188,7 +188,7 @@ class Message(Transaction):
                 "msg": self.msg
             },
         }
-        return json.dumps(data)
+        return json.dumps(data, indent=indent)
 
 
 class ProofOfWork:
@@ -251,28 +251,28 @@ class Block:
     def work_check(self):
         return self.pow.work_check()
 
-    def base_to_json(self):
+    def base_to_json(self, indent=None):
         data = {
             "id": self.id,
             "time": str(self.time),
             "prev": self.prev,
             "h_diff": self.h_diff,
             "v_diff": self.v_diff,
-            "trans": [json.loads(t.to_json_with_hash()) for t in self.trans]
+            "trans": [json.loads(t.to_json_with_hash(indent)) for t in self.trans]
         }
-        return json.dumps(data)
+        return json.dumps(data, indent=indent)
 
-    def to_json(self):
+    def to_json(self, indent=None):
         data = {
-            "base": json.loads(self.base_to_json()),
+            "base": json.loads(self.base_to_json(indent)),
             "pow": self.pow.pow
         }
-        return json.dumps(data)
+        return json.dumps(data, indent=indent)
 
-    def to_json_with_hash(self):
-        data = json.loads(self.to_json())
+    def to_json_with_hash(self, indent=None):
+        data = json.loads(self.to_json(indent))
         data['hash'] = self.hash().hexdigest()
-        return json.dumps(data)
+        return json.dumps(data, indent=indent)
 
     def hash(self):
         return hlib.sha3_256(self.to_json().encode('ascii'))
@@ -287,22 +287,22 @@ class Blockchain:
     def add_block(self, block):
         self.blocks[block.hash().hexdigest()] = block
 
-    def to_json(self):
+    def to_json(self, indent=None):
         data = {
             "coin": self.coin,
             "ver": self.ver,
-            "blocks": {h: json.loads(b.to_json_with_hash()) for h, b in self.blocks.items()},
+            "blocks": {h: json.loads(b.to_json_with_hash(indent)) for h, b in self.blocks.items()},
         }
-        return json.dumps(data)
+        return json.dumps(data, indent=indent)
 
     # def from_json(self):
     #     with open("data_file.json", "r") as read_file:
     #         data = json.load(read_file)
 
-    def to_json_with_hash(self):
-        data = json.loads(self.to_json())
+    def to_json_with_hash(self, indent=None):
+        data = json.loads(self.to_json(indent))
         data['hash'] = self.hash().hexdigest()
-        return json.dumps(data)
+        return json.dumps(data, indent=indent)
 
     def hash(self):
         return hlib.sha3_256(self.to_json().encode('ascii'))
