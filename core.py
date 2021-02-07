@@ -1,10 +1,11 @@
 import json
-import base64
+import base58
 import hashlib as hlib
 from functools import reduce
 from abc import ABC, abstractmethod
 from datetime import datetime as dt
 
+from Crypto.Cipher import AES
 from ecdsa import SigningKey, VerifyingKey, SECP256k1
 
 
@@ -17,48 +18,80 @@ class User:
         self.priv = None
 
     @staticmethod
+    def _encrypt_priv(priv, password):
+        hash = hlib.sha3_256(password.encode())
+        cipher = AES.new(hash.digest(), AES.MODE_GCM)
+
+        nonce = cipher.nonce
+        ciphertext, tag = cipher.encrypt_and_digest(priv.to_string())
+
+        return (nonce, ciphertext, tag)
+
+    @staticmethod
+    def _decrypt_priv(e_priv, password):
+        hash = hlib.sha3_256(password.encode())
+        cipher = AES.new(hash.digest(), AES.MODE_GCM, nonce=e_priv[0])
+
+        priv_raw = cipher.decrypt(e_priv[1])
+        cipher.verify(e_priv[2])
+    
+        return SigningKey.from_string(priv_raw, curve=SECP256k1)
+
+    @staticmethod
     def create(password):
         user = User()
-        user.priv = SigningKey.generate(curve=SECP256k1)
-        user.pub = user.priv.get_verifying_key()
+
+        priv = SigningKey.generate(curve=SECP256k1)
+
+        user.pub = priv.get_verifying_key()
+        user.priv = user._encrypt_priv(priv, password)
 
         return user
 
     @staticmethod
-    def login(priv_key):
+    def login(e_priv, password):
         user = User()
-        user.priv = SigningKey.from_string(base64.b64decode(priv_key), curve=SECP256k1)
-        user.pub = user.priv.get_verifying_key()
+
+        e_priv_raw = base58.b58decode(e_priv)
+        e_priv = (e_priv_raw[0:16], e_priv_raw[16:48], e_priv_raw[48:64])
+
+        priv = user._decrypt_priv(e_priv, password)
+
+        user.pub = priv.get_verifying_key()
+        user.priv = user._encrypt_priv(priv, password)
 
         return user
 
-    def get_keys(self):
-        return {'priv': base64.b64encode(self.priv.to_string()).decode(), 'pub': base64.b64encode(self.pub.to_string()).decode()}
-
     def get_pub(self):
-        return base64.b64encode(self.pub.to_string()).decode()
-    
-    def get_priv(self):
-        return base64.b64encode(self.priv.to_string()).decode()
+        return base58.b58encode(self.pub.to_string()).decode()
 
-    def sign(self, msg):
+    def get_priv(self, password):
+        priv = self._decrypt_priv(self.priv, password)
+        return base58.b58encode(priv.to_string()).decode()
+
+    def get_priv_ept(self):
+        return base58.b58encode(self.priv[0] + self.priv[1] + self.priv[2]).decode()
+
+    def sign(self, msg, password):
         h = hlib.sha3_256(msg).digest()
-        return base64.b64encode(self.priv.sign(h)).decode()
+        priv = self._decrypt_priv(self.priv, password)
+
+        return base58.b58encode(priv.sign(h)).decode()
 
     def verify(self, msg, sign):
         h = hlib.sha3_256(msg).digest()
         try:
-            self.pub.verify(base64.b64decode(sign), h)
+            self.pub.verify(base58.b58decode(sign), h)
         except:
             return False
         return True
 
 
 class Transaction(ABC):
-    def __init__(self, user, to_adr):
+    def __init__(self, user, to_adr, password):
         self.from_adr = user.get_pub()
         self.to_adr = to_adr
-        self.sign = user.sign(self.to_json().encode())
+        self.sign = user.sign(self.to_json().encode(), password)
 
     @abstractmethod
     def to_json(self):
@@ -78,9 +111,9 @@ class Transaction(ABC):
 
 
 class Invoice(Transaction):
-    def __init__(self, user, to_adr, amount):
+    def __init__(self, user, to_adr, amount, password):
         self.amount = amount
-        super().__init__(user, to_adr)
+        super().__init__(user, to_adr, password)
 
     def to_json(self):
         data = {
@@ -94,9 +127,9 @@ class Invoice(Transaction):
 
 
 class Payment(Transaction):
-    def __init__(self, user, to_adr, amount):
+    def __init__(self, user, to_adr, amount, password):
         self.amount = amount
-        super().__init__(user, to_adr)
+        super().__init__(user, to_adr, password)
 
     def to_json(self):
         data = {
@@ -110,9 +143,9 @@ class Payment(Transaction):
 
 
 class Message(Transaction):
-    def __init__(self, user, to_adr, msg):
+    def __init__(self, user, to_adr, msg, password):
         self.msg = msg
-        super().__init__(user, to_adr)
+        super().__init__(user, to_adr, password)
 
     def to_json(self):
         data = {
@@ -123,6 +156,7 @@ class Message(Transaction):
             },
         }
         return json.dumps(data)
+
 
 class ProofOfWork:
     def __init__(self, block):

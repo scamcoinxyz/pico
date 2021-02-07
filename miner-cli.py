@@ -1,7 +1,7 @@
 import argparse
 from miner import Miner
 
-from core import User, Block, Payment, ProofOfWork
+from core import User, Block, Message, Payment, ProofOfWork
 
 
 if __name__ == '__main__':
@@ -11,11 +11,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # fake data
-    user0 = User.create('1234')
-    user1 = User.create('1234')
+    user0 = User.create('mypassword')
+    user1 = User.login('5bkjPDt7qjEzGsP3Z5juroA29k6hd58q7NoqpGAQip88TyAFGJipBjMDHKnhuTiRE1awTuWCiZ4AuH7td6W5xBJM', '1234')
 
     block = Block(0, 14, 256)
-    block.add_trans(Payment(user0, user1.get_pub(), 10))
+    block.add_trans(Payment(user0, user1.get_pub(), 10, 'mypassword'))
+    block.add_trans(Message(user1, user0.get_pub(), 'Hello!', '1234'))
 
     miner = Miner(block)
     miner.work()

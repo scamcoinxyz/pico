@@ -2,6 +2,8 @@
 Tiny IOT-oriented CPU cryptocurrency written in [Python3](https://www.python.org/).
 
 Dependencies:
+* [base58](https://pypi.org/project/base58/)
+* [pycryptodome](https://pypi.org/project/pycryptodome/)
 * [ecdsa](https://pypi.org/project/ecdsa/)
 * [sympy](https://pypi.org/project/sympy/)
 
