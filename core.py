@@ -109,7 +109,7 @@ class User:
     def to_json_with_hash(self, indent=None):
         data = json.loads(self.to_json(indent))
         data['hash'] = self.hash().hexdigest()
-        return json.dumps(data)
+        return json.dumps(data, indent=indent)
 
     def hash(self):
         return hlib.sha3_256(self.to_json().encode('ascii'))
@@ -132,12 +132,12 @@ class Transaction(ABC):
     def to_json_with_sign(self, indent=None):
         data = json.loads(self.to_json(indent))
         data['sign'] = self.sign
-        return json.dumps(data)
+        return json.dumps(data, indent=indent)
 
     def to_json_with_hash(self, indent=None):
         data = json.loads(self.to_json_with_sign(indent))
         data['hash'] = self.hash().hexdigest()
-        return json.dumps(data)
+        return json.dumps(data, indent=indent)
 
     def hash(self):
         return hlib.sha3_256(self.to_json_with_sign().encode('ascii'))
@@ -231,22 +231,25 @@ class ProofOfWork:
 
 
 class Block:
-    def __init__(self, id, h_diff, v_diff, prev_block_hash):
+    def __init__(self, id, h_diff, v_diff, prev_block_hash, solver):
         self.id = id
         self.time = dt.utcnow()
-        self.trans = []
-        self.pow = ProofOfWork(self)
-
+        self.prev = prev_block_hash
         self.h_diff = h_diff
         self.v_diff = v_diff
-        self.prev = prev_block_hash
-        self.reward = 2 ** (8 - 8 * (h_diff - h_diff_init) / 50)
+        self.trans = []
+
+        self.pow = ProofOfWork(self)
+        self.solver = solver
 
     def add_trans(self, trans):
         self.trans.append(trans)
 
     def add_pow(self, num, factors):
         self.pow.add_pow(num, factors)
+
+    def reward(self):
+        return 2 ** (8 - 8 * (self.h_diff - h_diff_init) / 50)
 
     def work_check(self):
         return self.pow.work_check()
@@ -265,7 +268,8 @@ class Block:
     def to_json(self, indent=None):
         data = {
             "base": json.loads(self.base_to_json(indent)),
-            "pow": self.pow.pow
+            "pow": self.pow.pow,
+            "solver": self.solver
         }
         return json.dumps(data, indent=indent)
 
