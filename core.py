@@ -192,8 +192,9 @@ class Message(Transaction):
 
 
 class ProofOfWork:
-    def __init__(self, block):
+    def __init__(self, block, solver):
         self.block = block
+        self.solver = solver
         self.pow = {}
 
     @staticmethod
@@ -206,7 +207,10 @@ class ProofOfWork:
     def extract(self, i):
         data = {
             "base": json.loads(self.block.base_to_json()),
-            "pow": {n: f for n, f in list(self.pow.items())[0:i]}
+            "pow": {
+                "solver": self.solver,
+                "work": {n: f for n, f in list(self.pow.items())[0:i]}
+            }
         }
         blk = json.dumps(data).encode('ascii')
 
@@ -229,6 +233,13 @@ class ProofOfWork:
                 return False
         return True
 
+    def to_json(self, indent=None):
+        data = {
+            "solver": self.solver,
+            "work": self.pow
+        }
+        return json.dumps(data, indent=indent)
+
 
 class Block:
     def __init__(self, id, h_diff, v_diff, prev_block_hash, solver):
@@ -239,8 +250,7 @@ class Block:
         self.v_diff = v_diff
         self.trans = []
 
-        self.pow = ProofOfWork(self)
-        self.solver = solver
+        self.pow = ProofOfWork(self, solver)
 
     def add_trans(self, trans):
         self.trans.append(trans)
@@ -268,8 +278,7 @@ class Block:
     def to_json(self, indent=None):
         data = {
             "base": json.loads(self.base_to_json(indent)),
-            "pow": self.pow.pow,
-            "solver": self.solver
+            "pow": json.loads(self.pow.to_json(indent)),
         }
         return json.dumps(data, indent=indent)
 

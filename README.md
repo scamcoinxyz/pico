@@ -13,15 +13,17 @@ Dependencies:
 * All data represents in [json](https://en.wikipedia.org/wiki/JSON) format.
 * Modern [sha-3](https://en.wikipedia.org/wiki/SHA-3) hashing algorithm and [ECC](https://en.wikipedia.org/wiki/Elliptic-curve_cryptography).
 * Hard to parallel mining algorithm (recursive sequence of [integers factorization](https://en.wikipedia.org/wiki/Integer_factorization)). [See `Notes: 1`]
-* 2D difficulty. [See `Notes: 2`]
+* 2D difficulty. [See `Notes: 2`].
 * All miners earn coins. [See `Notes: 3`].
+* Block solver protection. [See `Notes: 4`].
 * Oriented to use in weak computing devices like [Orange PI](http://www.orangepi.org/orangepizero/) or [RPI](https://www.raspberrypi.org/).
 * Transactions can be used for coins transfer, send messages or some device actions. For example, turn on the smart lamp ([IOT](https://en.wikipedia.org/wiki/Internet_of_things)).
 
 Notes:
 1. Cores count has no advantage. Single core compute power is more important.
-2. `Horizontal` difficulty for factorization and `vertical` for recurse depth (see `Analysis.Difficulty and total supply`).
+2. **Horizontal** difficulty for factorization and **vertical** for recurse depth (see `Analysis.Difficulty and total supply`).
 3. All miners get a piece of reward for their work, if they done it before the next block will be solved (see `Analysis.Mining reward`).
+4. Mining algorithm designed in as such way that **proof of work** is related to **block solver**. To cheat it you have to redone all work again.
 
 
 ### Analysis
@@ -45,6 +47,7 @@ So maximum emission per round will be not changed so much - `2816000` coins.
 In other words, it's a mechanism to prevent the inflation.
 
 #### Difficulty and total supply
+The explanation below is not exactly a mining algorithm itself. It's just a description of how does it works.
 
 ##### Horizontal diffuculty
 Horizontal diffuculty (next `h_diff`) represents an integer factorization difficulty.
