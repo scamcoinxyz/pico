@@ -40,35 +40,72 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    # user
-    user = None
+    block_json = '''
+        {
+            "prev": null,
+            "time": "2021-02-08 15:18:40.104361",
+            "h_diff": 14,
+            "v_diff": 1,
+            "trans": {
+                "795875e2e136d4996e4f32771a92114f06449937b6be07a60f4e0dd6a3e4881d": {
+                    "time": "2021-02-08 15:18:40.102365",
+                    "from": "3ot1s6rnjV4TaHnUhG1myYmsu82uWwyzKGqujxXdHDt1R8kqZUx422UcPsey4gskVs9L5EfRCnSYH6me7U5nxyj3",
+                    "to": "3ot1s6rnjV4TaHnUhG1myYmsu82uWwyzKGqujxXdHDt1R8kqZUx422UcPsey4gskVs9L5EfRCnSYH6me7U5nxyj3",
+                    "act": {
+                        "msg": "Loopback"
+                    },
+                    "sign": "2g9Lker5ZSbPMdS154XVFc8A17ie2fdNE7fxqYUdVsdzXt3VaXi6y8LjHokKAcu1Yy25ZqRS4CpH7b3Q2cMgkunY",
+                    "hash": "795875e2e136d4996e4f32771a92114f06449937b6be07a60f4e0dd6a3e4881d"
+                }
+            },
+            "pow": {
+                "solver": "3ot1s6rnjV4TaHnUhG1myYmsu82uWwyzKGqujxXdHDt1R8kqZUx422UcPsey4gskVs9L5EfRCnSYH6me7U5nxyj3",
+                "work": {
+                    "3930369068219677936437051463568653": {
+                        "47": 1,
+                        "79": 1,
+                        "2953": 1,
+                        "2802959": 1,
+                        "127887527737543289803": 1
+                    }
+                }
+            },
+            "hash": "b34376643edb987590f544c00a458603cdb5c074620024095acbfca562883745"
+        }
+    '''
 
-    if os.path.exists(args.usr):
-        with open(args.usr, 'r') as f:
-            user = login(f.read())
-    else:
-        user = register()
-        with open(args.usr, 'w') as f:
-            f.write(user.to_json_with_hash(indent=4))
+    block = Block.from_json(block_json)
+    print(block.work_check())
 
-    # blockchain
-    chain = Blockchain('0.1')
-    miner = Miner()
+    # # user
+    # user = None
 
-    # transactions
-    trans = Transaction(user.get_pub(), user.get_pub(), Message('Loopback'))
-    trans.sign(user, '1234')
+    # if os.path.exists(args.usr):
+    #     with open(args.usr, 'r') as f:
+    #         user = login(f.read())
+    # else:
+    #     user = register()
+    #     with open(args.usr, 'w') as f:
+    #         f.write(user.to_json_with_hash(indent=4))
+    
+    # # blockchain
+    # chain = Blockchain('0.1')
+    # miner = Miner()
 
-    # block
-    block = Block(14, 256, None, user.get_pub())
-    block.add_trans(trans)
+    # # transactions
+    # trans = Transaction(user.get_pub(), user.get_pub(), Message('Loopback'))
+    # trans.sign(user, '1234')
 
-    miner.set_block(block)
-    miner.work()
-    chain.add_block(block)
+    # # block
+    # block = Block(14, 1, None, user.get_pub())
+    # block.add_trans(trans)
 
-    print(f'solved: reward {block.reward()} picocoins.')
+    # miner.set_block(block)
+    # miner.work()
+    # chain.add_block(block)
 
-    # save blockchain to disk
-    with open('blockchain.json', 'w') as f:
-        f.write(chain.to_json_with_hash(indent=4))
+    # print(f'solved: reward {block.reward()} picocoins.')
+
+    # # save blockchain to disk
+    # with open('blockchain.json', 'w') as f:
+    #     f.write(chain.to_json_with_hash(indent=4))

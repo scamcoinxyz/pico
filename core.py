@@ -211,6 +211,7 @@ class Transaction:
         }[act_str].from_json(json.dumps(data['act']))
 
         trans = Transaction(data['from'], data['to'], act)
+        trans.time = data['time']
         trans._sign = data['sign']
         trans.verify()
 
@@ -234,20 +235,20 @@ class ProofOfWork:
     def __init__(self, block, solver):
         self.block = block
         self.solver = solver
-        self.pow = {}
+        self.work = {}
 
     @staticmethod
     def _primes_int(factors):
-        return reduce(lambda prev, factor: prev * (factor[0] ** factor[1]), factors.items(), 1)
+        return reduce(lambda prev, factor: prev * (int(factor[0]) ** factor[1]), factors.items(), 1)
 
     def add_pow(self, num, factors):
-        self.pow[num] = factors
+        self.work[num] = factors
 
     def extract(self, i):
         data = json.loads(self.block.to_json())
         data['pow'] = {
             'solver': self.solver,
-            'work': {n: f for n, f in list(self.pow.items())[0:i]}
+            'work': {n: f for n, f in list(self.work.items())[0:i]}
         }
         blk = json.dumps(data).encode('ascii')
 
@@ -258,7 +259,7 @@ class ProofOfWork:
 
     def work_check_h(self, i):
         num, _ = self.extract(i)
-        factors = list(self.pow.items())[i][1]
+        factors = list(self.work.items())[i][1]
 
         if num == self._primes_int(factors):
             return True
@@ -269,13 +270,6 @@ class ProofOfWork:
             if not self.work_check_h(i):
                 return False
         return True
-
-    def to_json(self, indent=None):
-        data = {
-            'solver': self.solver,
-            'work': self.pow
-        }
-        return json.dumps(data, indent=indent)
 
 
 class Block:
@@ -300,6 +294,28 @@ class Block:
     def work_check(self):
         return self.pow.work_check()
 
+    @staticmethod
+    def from_json(block_json):
+        data = json.loads(block_json)
+
+        prev = data['prev']
+        time = data['time']
+        h_diff = data['h_diff']
+        v_diff = data['v_diff']
+        solver = data['pow']['solver']
+
+        block = Block(h_diff, v_diff, prev, solver)
+        block.time = time
+        block.trans = {h: Transaction.from_json(json.dumps(t)) for h, t in data['trans'].items()}
+        block.pow = ProofOfWork(block, solver)
+        block.pow.work = data['pow']['work']
+
+        expected_hash = data['hash']
+        if expected_hash != block.hash().hexdigest():
+            raise json.JSONDecodeError('Invalid hash!', block_json, 0)
+
+        return block
+
     def to_json(self, indent=None):
         data = {
             'prev': self.prev,
@@ -307,7 +323,10 @@ class Block:
             'h_diff': self.h_diff,
             'v_diff': self.v_diff,
             'trans': {h: json.loads(t.to_json_with_hash(indent)) for h, t in self.trans.items()},
-            'pow': json.loads(self.pow.to_json(indent)),
+            'pow': {
+                'solver': self.pow.solver,
+                'work': self.pow.work
+            }
         }
         return json.dumps(data, indent=indent)
 
@@ -337,7 +356,8 @@ class Blockchain:
         }
         return json.dumps(data, indent=indent)
 
-    def from_json(self):
+    @staticmethod
+    def from_json(chain_json):
         pass
 
     def to_json_with_hash(self, indent=None):
