@@ -65,7 +65,13 @@ class User:
     @staticmethod
     def from_json(usr_json, password):
         data = json.loads(usr_json)
-        user = User.login(data['priv'], password)
+
+        priv_b = base58.b58decode(data['priv'])
+        pub_b = base58.b58decode(data['pub'])
+
+        user = User()
+        user.priv = (priv_b[0:16], priv_b[16:48], priv_b[48:64])
+        user.pub = VerifyingKey.from_string(pub_b, curve=SECP256k1)
 
         expected_hash = data['hash']
         if expected_hash != user.hash().hexdigest():
