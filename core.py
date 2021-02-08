@@ -38,7 +38,7 @@ class User:
         return SigningKey.from_string(priv_raw, curve=SECP256k1)
 
     @staticmethod
-    def create(password):
+    def register(password):
         user = User()
 
         priv = SigningKey.generate(curve=SECP256k1)
@@ -69,9 +69,9 @@ class User:
         expected_hash = data['hash']
         del data['hash']
 
-        hash = hlib.sha3_256(json.dumps(data).encode('ascii')).hexdigest()
+        h = hlib.sha3_256(json.dumps(data).encode('ascii')).hexdigest()
 
-        if hash != expected_hash:
+        if h != expected_hash:
             raise json.JSONDecodeError('Invalid hash!', json_data, 0)
         return User.login(data['priv'], password)
 
@@ -93,11 +93,17 @@ class User:
 
     def verify(self, msg, sign):
         h = hlib.sha3_256(msg).digest()
-        try:
-            self.pub.verify(base58.b58decode(sign), h)
-        except:
-            return False
-        return True
+        self.pub.verify(base58.b58decode(sign), h)
+
+    @staticmethod
+    def verify_with_key(pub_str, msg, sign_str):
+        h = hlib.sha3_256(msg).digest()
+
+        pub = base58.b58decode(pub_str)
+        sign = base58.b58decode(sign_str)
+
+        pub_obj = VerifyingKey.from_string(pub, curve=SECP256k1)
+        pub_obj.verify(sign, h)
 
     def to_json(self, indent=None):
         data = {
@@ -115,23 +121,104 @@ class User:
         return hlib.sha3_256(self.to_json().encode('ascii'))
 
 
-class Transaction(ABC):
-    def __init__(self, user, to_adr, password):
-        self.from_adr = user.get_pub()
-        self.to_adr = to_adr
-        self.sign = user.sign(self.to_json().encode(), password)
+class Invoice:
+    def __init__(self, amount):
+        self.amount = amount
 
-    @abstractmethod
     def to_json(self, indent=None):
-        pass
+        data = {'ivc': self.amount}
+        return json.dumps(data, indent=indent)
 
-    # @abstractmethod
-    # def from_json(self):
-    #     pass
+    @staticmethod
+    def from_json(ivc_json):
+        data = json.loads(ivc_json)
+        return Invoice(int(data['ivc']))
+
+
+class Payment:
+    def __init__(self, amount):
+        self.amount = amount
+
+    def to_json(self, indent=None):
+        data = {'pay': self.amount}
+        return json.dumps(data, indent=indent)
+
+    @staticmethod
+    def from_json(pay_json):
+        data = json.loads(pay_json)
+        return Payment(int(data['pay']))
+
+
+class Message:
+    def __init__(self, msg):
+        self.msg = msg
+
+    def to_json(self, indent=None):
+        data = {'msg': self.msg}
+        return json.dumps(data, indent=indent)
+
+    @staticmethod
+    def from_json(msg_json):
+        data = json.loads(msg_json)
+        return Message(data['msg'])
+
+
+class Transaction:
+    def __init__(self, from_adr, to_adr, act):
+        self.time = dt.utcnow()
+        self.from_adr = from_adr
+        self.to_adr = to_adr
+        self.act = act
+        self._sign = None
+
+    def sign(self, user, password):
+        self._sign = user.sign(self.to_json().encode(), password)
+        return self._sign
+
+    def verify(self):
+        msg = self.to_json().encode()
+        User.verify_with_key(self.from_adr, msg, self._sign)
+
+    def to_json(self, indent=None):
+        data = {
+            'time': str(self.time),
+            'from': self.from_adr,
+            'to': self.to_adr,
+            'act': json.loads(self.act.to_json())
+        }
+        return json.dumps(data, indent=indent)
+
+    @staticmethod
+    def from_json(trans_json):
+        data = json.loads(trans_json)
+
+        # check hash
+        expected_hash = data['hash']
+        del data['hash']
+
+        h = hlib.sha3_256(json.dumps(data).encode('ascii')).hexdigest()
+
+        if h != expected_hash:
+            raise json.JSONDecodeError('Invalid hash!', json_data, 0)
+
+        act_str = list(data['act'].items())[0][0]
+
+        # create transaction
+        act = {
+            'ivc': Invoice,
+            'pay': Payment,
+            'msg': Message
+        }[act_str].from_json(json.dumps(data['act']))
+
+        trans = Transaction(data['from'], data['to'], act)
+        trans._sign = data['sign']
+        trans.verify()
+
+        return trans
 
     def to_json_with_sign(self, indent=None):
         data = json.loads(self.to_json(indent))
-        data['sign'] = self.sign
+        data['sign'] = self._sign
         return json.dumps(data, indent=indent)
 
     def to_json_with_hash(self, indent=None):
@@ -141,54 +228,6 @@ class Transaction(ABC):
 
     def hash(self):
         return hlib.sha3_256(self.to_json_with_sign().encode('ascii'))
-
-
-class Invoice(Transaction):
-    def __init__(self, user, to_adr, amount, password):
-        self.amount = amount
-        super().__init__(user, to_adr, password)
-
-    def to_json(self, indent=None):
-        data = {
-            "from": self.from_adr,
-            "to": self.to_adr,
-            "act": {
-                "invoice": self.amount
-            },
-        }
-        return json.dumps(data, indent=indent)
-
-
-class Payment(Transaction):
-    def __init__(self, user, to_adr, amount, password):
-        self.amount = amount
-        super().__init__(user, to_adr, password)
-
-    def to_json(self, indent=None):
-        data = {
-            "from": self.from_adr,
-            "to": self.to_adr,
-            "act": {
-                "pay": self.amount
-            },
-        }
-        return json.dumps(data, indent=indent)
-
-
-class Message(Transaction):
-    def __init__(self, user, to_adr, msg, password):
-        self.msg = msg
-        super().__init__(user, to_adr, password)
-
-    def to_json(self, indent=None):
-        data = {
-            "from": self.from_adr,
-            "to": self.to_adr,
-            "act": {
-                "msg": self.msg
-            },
-        }
-        return json.dumps(data, indent=indent)
 
 
 class ProofOfWork:
@@ -205,12 +244,10 @@ class ProofOfWork:
         self.pow[num] = factors
 
     def extract(self, i):
-        data = {
-            "base": json.loads(self.block.base_to_json()),
-            "pow": {
-                "solver": self.solver,
-                "work": {n: f for n, f in list(self.pow.items())[0:i]}
-            }
+        data = json.loads(self.block.to_json())
+        data['pow'] = {
+            'solver': self.solver,
+            'work': {n: f for n, f in list(self.pow.items())[0:i]}
         }
         blk = json.dumps(data).encode('ascii')
 
@@ -235,25 +272,24 @@ class ProofOfWork:
 
     def to_json(self, indent=None):
         data = {
-            "solver": self.solver,
-            "work": self.pow
+            'solver': self.solver,
+            'work': self.pow
         }
         return json.dumps(data, indent=indent)
 
 
 class Block:
-    def __init__(self, id, h_diff, v_diff, prev_block_hash, solver):
-        self.id = id
-        self.time = dt.utcnow()
+    def __init__(self, h_diff, v_diff, prev_block_hash, solver):
         self.prev = prev_block_hash
+        self.time = dt.utcnow()
         self.h_diff = h_diff
         self.v_diff = v_diff
-        self.trans = []
+        self.trans = {}
 
         self.pow = ProofOfWork(self, solver)
 
     def add_trans(self, trans):
-        self.trans.append(trans)
+        self.trans[trans.hash().hexdigest()] = trans
 
     def add_pow(self, num, factors):
         self.pow.add_pow(num, factors)
@@ -264,21 +300,14 @@ class Block:
     def work_check(self):
         return self.pow.work_check()
 
-    def base_to_json(self, indent=None):
-        data = {
-            "id": self.id,
-            "time": str(self.time),
-            "prev": self.prev,
-            "h_diff": self.h_diff,
-            "v_diff": self.v_diff,
-            "trans": [json.loads(t.to_json_with_hash(indent)) for t in self.trans]
-        }
-        return json.dumps(data, indent=indent)
-
     def to_json(self, indent=None):
         data = {
-            "base": json.loads(self.base_to_json(indent)),
-            "pow": json.loads(self.pow.to_json(indent)),
+            'prev': self.prev,
+            'time': str(self.time),
+            'h_diff': self.h_diff,
+            'v_diff': self.v_diff,
+            'trans': {h: json.loads(t.to_json_with_hash(indent)) for h, t in self.trans.items()},
+            'pow': json.loads(self.pow.to_json(indent)),
         }
         return json.dumps(data, indent=indent)
 
@@ -293,7 +322,7 @@ class Block:
 
 class Blockchain:
     def __init__(self, ver):
-        self.coin = "PicoCoin"
+        self.coin = 'PicoCoin'
         self.ver = ver
         self.blocks = {}
 
@@ -302,15 +331,14 @@ class Blockchain:
 
     def to_json(self, indent=None):
         data = {
-            "coin": self.coin,
-            "ver": self.ver,
-            "blocks": {h: json.loads(b.to_json_with_hash(indent)) for h, b in self.blocks.items()},
+            'coin': self.coin,
+            'ver': self.ver,
+            'blocks': {h: json.loads(b.to_json_with_hash(indent)) for h, b in self.blocks.items()},
         }
         return json.dumps(data, indent=indent)
 
-    # def from_json(self):
-    #     with open("data_file.json", "r") as read_file:
-    #         data = json.load(read_file)
+    def from_json(self):
+        pass
 
     def to_json_with_hash(self, indent=None):
         data = json.loads(self.to_json(indent))

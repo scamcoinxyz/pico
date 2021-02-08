@@ -3,24 +3,33 @@ import os.path
 from getpass import getpass
 
 from miner import Miner
-from core import User, Block, Blockchain, Invoice, Payment, Message
+from core import User, Block, Blockchain, Transaction, Invoice, Payment, Message
 
 
-def logon(user_json):
+def get_pass(prefix='Password: '):
+    return getpass(prefix)
+
+
+def login(user_json):
     while True:
-        password = getpass('Password: ')
-
         try:
-            return User.from_json(user_json, password)
+            passwd = get_pass()
+            return User.from_json(user_json, passwd)
         except:
             print('Invalid password!')
 
 
 def register():
-    print('No user presented, creating new one.')
-    password = getpass('Password: ')
+    print('No user presented, register new one.')
 
-    return User.create(password)
+    while True:
+        passwd0 = get_pass()
+        passwd1 = get_pass('Repeat password:')
+
+        if passwd0 == passwd1:
+            return User.register(passwd0)
+
+        print('Passwords mismatch, please, try again.')
 
 
 if __name__ == '__main__':
@@ -36,7 +45,7 @@ if __name__ == '__main__':
 
     if os.path.exists(args.usr):
         with open(args.usr, 'r') as f:
-            user = logon(f.read())
+            user = login(f.read())
     else:
         user = register()
         with open(args.usr, 'w') as f:
@@ -46,8 +55,13 @@ if __name__ == '__main__':
     chain = Blockchain('0.1')
     miner = Miner()
 
+    # transactions
+    trans = Transaction(user.get_pub(), user.get_pub(), Message('Loopback'))
+    trans.sign(user, '1234')
+
     # block
-    block = Block(0, 14, 256, None, user.get_pub())
+    block = Block(14, 256, None, user.get_pub())
+    block.add_trans(trans)
 
     miner.set_block(block)
     miner.work()
