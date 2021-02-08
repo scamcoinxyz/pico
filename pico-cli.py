@@ -42,40 +42,47 @@ if __name__ == '__main__':
 
     block_json = '''
         {
-            "prev": null,
-            "time": "2021-02-08 15:18:40.104361",
-            "h_diff": 14,
-            "v_diff": 1,
-            "trans": {
-                "795875e2e136d4996e4f32771a92114f06449937b6be07a60f4e0dd6a3e4881d": {
-                    "time": "2021-02-08 15:18:40.102365",
-                    "from": "3ot1s6rnjV4TaHnUhG1myYmsu82uWwyzKGqujxXdHDt1R8kqZUx422UcPsey4gskVs9L5EfRCnSYH6me7U5nxyj3",
-                    "to": "3ot1s6rnjV4TaHnUhG1myYmsu82uWwyzKGqujxXdHDt1R8kqZUx422UcPsey4gskVs9L5EfRCnSYH6me7U5nxyj3",
-                    "act": {
-                        "msg": "Loopback"
+            "coin": "PicoCoin",
+            "ver": "0.1",
+            "blocks": {
+                "b34376643edb987590f544c00a458603cdb5c074620024095acbfca562883745": {
+                    "prev": null,
+                    "time": "2021-02-08 15:18:40.104361",
+                    "h_diff": 14,
+                    "v_diff": 1,
+                    "trans": {
+                        "795875e2e136d4996e4f32771a92114f06449937b6be07a60f4e0dd6a3e4881d": {
+                            "time": "2021-02-08 15:18:40.102365",
+                            "from": "3ot1s6rnjV4TaHnUhG1myYmsu82uWwyzKGqujxXdHDt1R8kqZUx422UcPsey4gskVs9L5EfRCnSYH6me7U5nxyj3",
+                            "to": "3ot1s6rnjV4TaHnUhG1myYmsu82uWwyzKGqujxXdHDt1R8kqZUx422UcPsey4gskVs9L5EfRCnSYH6me7U5nxyj3",
+                            "act": {
+                                "msg": "Loopback"
+                            },
+                            "sign": "2g9Lker5ZSbPMdS154XVFc8A17ie2fdNE7fxqYUdVsdzXt3VaXi6y8LjHokKAcu1Yy25ZqRS4CpH7b3Q2cMgkunY",
+                            "hash": "795875e2e136d4996e4f32771a92114f06449937b6be07a60f4e0dd6a3e4881d"
+                        }
                     },
-                    "sign": "2g9Lker5ZSbPMdS154XVFc8A17ie2fdNE7fxqYUdVsdzXt3VaXi6y8LjHokKAcu1Yy25ZqRS4CpH7b3Q2cMgkunY",
-                    "hash": "795875e2e136d4996e4f32771a92114f06449937b6be07a60f4e0dd6a3e4881d"
+                    "pow": {
+                        "solver": "3ot1s6rnjV4TaHnUhG1myYmsu82uWwyzKGqujxXdHDt1R8kqZUx422UcPsey4gskVs9L5EfRCnSYH6me7U5nxyj3",
+                        "work": {
+                            "3930369068219677936437051463568653": {
+                                "47": 1,
+                                "79": 1,
+                                "2953": 1,
+                                "2802959": 1,
+                                "127887527737543289803": 1
+                            }
+                        }
+                    },
+                    "hash": "b34376643edb987590f544c00a458603cdb5c074620024095acbfca562883745"
                 }
             },
-            "pow": {
-                "solver": "3ot1s6rnjV4TaHnUhG1myYmsu82uWwyzKGqujxXdHDt1R8kqZUx422UcPsey4gskVs9L5EfRCnSYH6me7U5nxyj3",
-                "work": {
-                    "3930369068219677936437051463568653": {
-                        "47": 1,
-                        "79": 1,
-                        "2953": 1,
-                        "2802959": 1,
-                        "127887527737543289803": 1
-                    }
-                }
-            },
-            "hash": "b34376643edb987590f544c00a458603cdb5c074620024095acbfca562883745"
+            "hash": "d85eaf8f19369f24b2652b20b81cf99383a446f1eba367b3d44d483826226cbe"
         }
     '''
 
-    block = Block.from_json(block_json)
-    print(block.work_check())
+    chain = Blockchain.from_json(block_json)
+    print(chain.blocks)
 
     # # user
     # user = None

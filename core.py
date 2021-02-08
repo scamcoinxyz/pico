@@ -63,17 +63,14 @@ class User:
         return user
 
     @staticmethod
-    def from_json(json_data, password):
-        data = json.loads(json_data)
+    def from_json(usr_json, password):
+        data = json.loads(usr_json)
+        user = User.login(data['priv'], password)
 
         expected_hash = data['hash']
-        del data['hash']
-
-        h = hlib.sha3_256(json.dumps(data).encode('ascii')).hexdigest()
-
-        if h != expected_hash:
-            raise json.JSONDecodeError('Invalid hash!', json_data, 0)
-        return User.login(data['priv'], password)
+        if expected_hash != user.hash().hexdigest():
+            raise json.JSONDecodeError('Invalid hash!', usr_json, 0)
+        return user
 
     def get_pub(self):
         return base58.b58encode(self.pub.to_string()).decode()
@@ -191,16 +188,6 @@ class Transaction:
     @staticmethod
     def from_json(trans_json):
         data = json.loads(trans_json)
-
-        # check hash
-        expected_hash = data['hash']
-        del data['hash']
-
-        h = hlib.sha3_256(json.dumps(data).encode('ascii')).hexdigest()
-
-        if h != expected_hash:
-            raise json.JSONDecodeError('Invalid hash!', json_data, 0)
-
         act_str = list(data['act'].items())[0][0]
 
         # create transaction
@@ -215,6 +202,9 @@ class Transaction:
         trans._sign = data['sign']
         trans.verify()
 
+        expected_hash = data['hash']
+        if expected_hash != trans.hash().hexdigest():
+            raise json.JSONDecodeError('Invalid hash!', trans_json, 0)
         return trans
 
     def to_json_with_sign(self, indent=None):
@@ -313,7 +303,6 @@ class Block:
         expected_hash = data['hash']
         if expected_hash != block.hash().hexdigest():
             raise json.JSONDecodeError('Invalid hash!', block_json, 0)
-
         return block
 
     def to_json(self, indent=None):
@@ -358,7 +347,19 @@ class Blockchain:
 
     @staticmethod
     def from_json(chain_json):
-        pass
+        data = json.loads(chain_json)
+
+        coin = data['coin']
+        ver = data['ver']
+
+        chain = Blockchain(ver)
+        chain.coin = coin
+        chain.blocks = {h: Block.from_json(json.dumps(b)) for h, b in data['blocks'].items()}
+
+        expected_hash = data['hash']
+        if expected_hash != chain.hash().hexdigest():
+            raise json.JSONDecodeError('Invalid hash!', chain_json, 0)
+        return chain
 
     def to_json_with_hash(self, indent=None):
         data = json.loads(self.to_json(indent))
