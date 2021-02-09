@@ -33,10 +33,12 @@ def register():
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='PicoCoin core cli.')
+    parser = argparse.ArgumentParser(prog='python3 pico-cli.py', description='PicoCoin core cli.')
     parser.add_argument('--usr', type=str, default='user.json', help='path to user keys')
+    parser.add_argument('--chain', type=str, default='blockchain.json', help='path to blockchain')
     parser.add_argument('--mining',  type=bool, default=False, help='work as mining server')
     parser.add_argument('--adr',  type=str, default='127.0.0.1', help='server listen address (default: "127.0.0.1")')
+    parser.add_argument('--trans', nargs=3, metavar=('to', 'act', 'args'), help='make a transaction')
 
     args = parser.parse_args()
 
@@ -50,51 +52,62 @@ if __name__ == '__main__':
         user = register()
         with open(args.usr, 'w') as f:
             f.write(user.to_json_with_hash(indent=4))
-    
-    # blockchain (let's emulate network)
-    chain_node0 = Blockchain('0.1')
-    chain_node1 = Blockchain('0.1')
-    chain_node2 = Blockchain('0.1')
 
-    # node0 solves block
+    # blockchain
+    chain = None
+
+    if os.path.exists(args.chain):
+        with open(args.chain, 'r') as f:
+            chain = Blockchain.from_json(f.read())
+    else:
+        # FIXME: fetch blockchain from another node
+        chain = Blockchain('0.1')
+        with open('blockchain.json', 'w') as f:
+            f.write(chain.to_json_with_hash(indent=4))
+
+    # miner
     miner = Miner()
 
     # transactions
-    trans = Transaction(user.get_pub(), user.get_pub(), Message('Loopback'))
-    trans.sign(user, get_pass())
+    trans = None
+    if args.trans is not None:
+        to = args.trans[0]
+        act_args = args.trans[2]
+ 
+        act = {
+            'ivc': lambda: Invoice(int(act_args)),
+            'pay': lambda: Payment(int(act_args)),
+            'msg': lambda: Message(act_args)
+        }[args.trans[1]]()
+
+        trans = Transaction(user.get_pub(), to, act)
+
+        ans = input('Do u want to make a transaction? [y/n]: ')
+        if ans in ('y', 'Y'):
+            trans.sign(user, get_pass())
+            print(trans.to_json_with_hash())
+        else:
+            trans = None
 
     # block
-    block = Block(14, 256, None, user.get_pub())
-    block.add_trans(trans)
+    prev = chain.last_block()
+    block = None
 
+    if prev is not None:
+        h_diff = prev.h_diff + (1 if chain.blocks_count() % 10000 == 0 else 0)
+        block = Block(h_diff, prev.hash().hexdigest(), user.get_pub())
+    else:
+        block = Block(14, None, user.get_pub())
+
+    if trans is not None:
+        block.add_trans(trans)
+
+    # mining
     miner.set_block(block)
     miner.work()
-    chain_node0.add_block(block)
-
-    # send block from node0 to (node1, node2)
-    chain_node1.add_block(block)
-    chain_node2.add_block(block)
-
-    # confirm block from node1
-    chain_node0.add_block(block)
-    chain_node2.add_block(block)
-
-    # confirm block from node2
-    chain_node0.add_block(block)
-    chain_node1.add_block(block)
-
-    # confirm block from node0
-    chain_node1.add_block(block)
-    chain_node2.add_block(block)
+    chain.add_block(block)
 
     print(f'solved: reward {block.reward()} picocoins.')
 
-    # save blockchain to disk
-    with open('blockchain_node0.json', 'w') as f:
-        f.write(chain_node0.to_json_with_hash(indent=4))
-
-    with open('blockchain_node1.json', 'w') as f:
-        f.write(chain_node1.to_json_with_hash(indent=4))
-
-    with open('blockchain_node2.json', 'w') as f:
-        f.write(chain_node2.to_json_with_hash(indent=4))
+    with open('blockchain.json', 'w') as f:
+        f.write(chain.to_json_with_hash(indent=4))

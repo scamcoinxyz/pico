@@ -10,7 +10,7 @@ from ecdsa import SigningKey, VerifyingKey, SECP256k1
 
 
 h_diff_init = 14
-block_confirms_count = 3
+block_confirms_count = 1
 
 
 class User:
@@ -270,11 +270,11 @@ class ProofOfWork:
 
 
 class Block:
-    def __init__(self, h_diff, v_diff, prev_block_hash, solver):
+    def __init__(self, h_diff, prev_block_hash, solver):
         self.prev = prev_block_hash
         self.time = dt.utcnow()
         self.h_diff = h_diff
-        self.v_diff = v_diff
+        self.v_diff = max(1, 2 ** (13 - 3 * h_diff // 8))
         self.trans = {}
 
         self.pow = ProofOfWork(self, solver)
@@ -301,8 +301,9 @@ class Block:
         v_diff = data['v_diff']
         solver = data['pow']['solver']
 
-        block = Block(h_diff, v_diff, prev, solver)
+        block = Block(h_diff, prev, solver)
         block.time = time
+        block.v_diff = v_diff
         block.trans = {h: Transaction.from_json(json.dumps(t)) for h, t in data['trans'].items()}
         block.pow = ProofOfWork(block, solver)
         block.pow.work = data['pow']['work']
@@ -345,16 +346,29 @@ class Blockchain:
 
     def add_block(self, block):
         # reject block if pow fails or block is already in blockchain
-        if (not block.work_check()) or (self.blocks.get(block.hash()) is not None):
+        if (not block.work_check()) or (self.blocks.get(block.hash().hexdigest()) is not None):
             return
 
-        if self.blocks_cache.get(block) is None:
-            self.blocks_cache[block] = 0
+        if self.blocks_cache.get(block.prev) is None:
+            self.blocks_cache[block.prev] = {}
 
-        self.blocks_cache[block] += 1
+        if self.blocks_cache[block.prev].get(block) is None:
+            self.blocks_cache[block.prev][block] = 0
 
-        if self.blocks_cache[block] >= block_confirms_count:
+        self.blocks_cache[block.prev][block] += 1
+
+        if self.blocks_cache[block.prev][block] >= block_confirms_count:
             self.blocks[block.hash().hexdigest()] = block
+
+    def last_block(self):
+        try:
+            tmp = list(self.blocks.items())
+            return tmp[len(tmp) - 1][1]
+        except IndexError:
+            return None
+
+    def blocks_count(self):
+        return len(self.blocks.items())
 
     def to_json(self, indent=None):
         data = {
