@@ -35,7 +35,7 @@ def register():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PicoCoin core cli.')
     parser.add_argument('--usr', type=str, default='user.json', help='path to user keys')
-    parser.add_argument('--serv',  type=bool, default=False, help='work as server')
+    parser.add_argument('--mining',  type=bool, default=False, help='work as mining server')
     parser.add_argument('--adr',  type=str, default='127.0.0.1', help='server listen address (default: "127.0.0.1")')
 
     args = parser.parse_args()
@@ -51,8 +51,12 @@ if __name__ == '__main__':
         with open(args.usr, 'w') as f:
             f.write(user.to_json_with_hash(indent=4))
     
-    # blockchain
-    chain = Blockchain('0.1')
+    # blockchain (let's emulate network)
+    chain_node0 = Blockchain('0.1')
+    chain_node1 = Blockchain('0.1')
+    chain_node2 = Blockchain('0.1')
+
+    # node0 solves block
     miner = Miner()
 
     # transactions
@@ -65,10 +69,32 @@ if __name__ == '__main__':
 
     miner.set_block(block)
     miner.work()
-    chain.add_block(block)
+    chain_node0.add_block(block)
+
+    # send block from node0 to (node1, node2)
+    chain_node1.add_block(block)
+    chain_node2.add_block(block)
+
+    # confirm block from node1
+    chain_node0.add_block(block)
+    chain_node2.add_block(block)
+
+    # confirm block from node2
+    chain_node0.add_block(block)
+    chain_node1.add_block(block)
+
+    # confirm block from node0
+    chain_node1.add_block(block)
+    chain_node2.add_block(block)
 
     print(f'solved: reward {block.reward()} picocoins.')
 
     # save blockchain to disk
-    with open('blockchain.json', 'w') as f:
-        f.write(chain.to_json_with_hash(indent=4))
+    with open('blockchain_node0.json', 'w') as f:
+        f.write(chain_node0.to_json_with_hash(indent=4))
+
+    with open('blockchain_node1.json', 'w') as f:
+        f.write(chain_node1.to_json_with_hash(indent=4))
+
+    with open('blockchain_node2.json', 'w') as f:
+        f.write(chain_node2.to_json_with_hash(indent=4))

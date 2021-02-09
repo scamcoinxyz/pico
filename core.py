@@ -10,6 +10,7 @@ from ecdsa import SigningKey, VerifyingKey, SECP256k1
 
 
 h_diff_init = 14
+block_confirms_count = 3
 
 
 class User:
@@ -340,8 +341,20 @@ class Blockchain:
         self.ver = ver
         self.blocks = {}
 
+        self.blocks_cache = {}
+
     def add_block(self, block):
-        self.blocks[block.hash().hexdigest()] = block
+        # reject block if pow fails or block is already in blockchain
+        if (not block.work_check()) or (self.blocks.get(block.hash()) is not None):
+            return
+
+        if self.blocks_cache.get(block) is None:
+            self.blocks_cache[block] = 0
+
+        self.blocks_cache[block] += 1
+
+        if self.blocks_cache[block] >= block_confirms_count:
+            self.blocks[block.hash().hexdigest()] = block
 
     def to_json(self, indent=None):
         data = {
