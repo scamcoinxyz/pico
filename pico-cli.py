@@ -27,7 +27,7 @@ def register():
         passwd1 = get_pass('Repeat password:')
 
         if passwd0 == passwd1:
-            return User.register(passwd0)
+            return User.create(passwd0)
 
         print('Passwords mismatch, please, try again.')
 
@@ -80,7 +80,7 @@ if __name__ == '__main__':
             'msg': lambda: Message(act_args)
         }[args.trans[1]]()
 
-        trans = Transaction(user.get_pub(), to, act)
+        trans = Transaction(user.pub, to, act)
 
         ans = input('Do u want to make a transaction? [y/n]: ')
         if ans in ('y', 'Y'):
@@ -95,9 +95,9 @@ if __name__ == '__main__':
 
     if prev is not None:
         h_diff = prev.h_diff + (1 if chain.blocks_count() % 10000 == 0 else 0)
-        block = Block(h_diff, prev.hash().hexdigest(), user.get_pub())
+        block = Block(h_diff, prev.hash().hexdigest(), user.pub)
     else:
-        block = Block(14, None, user.get_pub())
+        block = Block(14, None, user.pub)
 
     if trans is not None:
         block.add_trans(trans)

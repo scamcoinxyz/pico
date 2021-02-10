@@ -2,7 +2,7 @@ from sympy.ntheory import factorint
 
 
 class MinerBackend:
-    MINER_BACKEND_SYMPY = 'sympy',
+    MINER_BACKEND_SYMPY = 'sympy'
 
     def __init__(self, backend):
         self.backend = backend
@@ -24,7 +24,7 @@ class Miner:
 
     def work(self):
         for i in range(self.block.v_diff):
-            num, _ = self.block.pow.extract(i)
+            num = self.block.pow.extract(i)
             factors = self.backend.factorint(num)
 
             self.block.add_pow(num, factors)

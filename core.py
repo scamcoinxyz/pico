@@ -52,7 +52,8 @@ class JSONSignable(JSONHashable):
 
     def verify(self):
         msg = self.to_json_without_sign().encode()
-        User.verify_with_key(self.from_adr, msg, self._sign)
+        user = User(None, self.from_adr)
+        user.verify(msg, self._sign)
 
     def to_json(self, indent=None):
         data = json.loads(self.to_json_without_sign(indent))
@@ -61,9 +62,9 @@ class JSONSignable(JSONHashable):
 
 
 class User(JSONHashable):
-    def __init__(self):
-        self.pub = None
-        self.priv = None
+    def __init__(self, priv, pub):
+        self.priv = priv
+        self.pub = pub
 
     @staticmethod
     def _encrypt_priv(priv, password):
@@ -71,92 +72,57 @@ class User(JSONHashable):
         cipher = AES.new(h.digest(), AES.MODE_GCM)
 
         nonce = cipher.nonce
-        ciphertext, tag = cipher.encrypt_and_digest(priv.to_string())
+        ciphertext, tag = cipher.encrypt_and_digest(base58.b58decode(priv))
 
-        return (nonce, ciphertext, tag)
+        return base58.b58encode(nonce + ciphertext + tag)
 
     @staticmethod
     def _decrypt_priv(e_priv, password):
-        h = hlib.sha3_256(password.encode())
-        cipher = AES.new(h.digest(), AES.MODE_GCM, nonce=e_priv[0])
-
-        priv_raw = cipher.decrypt(e_priv[1])
-        cipher.verify(e_priv[2])
-    
-        return SigningKey.from_string(priv_raw, curve=SECP256k1)
-
-    @staticmethod
-    def register(password):
-        user = User()
-
-        priv = SigningKey.generate(curve=SECP256k1)
-
-        user.pub = priv.get_verifying_key()
-        user.priv = user._encrypt_priv(priv, password)
-
-        return user
-
-    @staticmethod
-    def login(e_priv, password):
-        user = User()
-
         e_priv_raw = base58.b58decode(e_priv)
-        e_priv = (e_priv_raw[0:16], e_priv_raw[16:48], e_priv_raw[48:64])
 
-        priv = user._decrypt_priv(e_priv, password)
+        h = hlib.sha3_256(password.encode())
+        cipher = AES.new(h.digest(), AES.MODE_GCM, nonce=e_priv_raw[0:16])
 
-        user.pub = priv.get_verifying_key()
-        user.priv = user._encrypt_priv(priv, password)
+        priv_raw = cipher.decrypt_and_verify(e_priv_raw[16:48], e_priv_raw[48:64])
 
-        return user
+        return base58.b58encode(priv_raw).decode()
+
+    @staticmethod
+    def create(password):
+        priv_raw = SigningKey.generate(curve=SECP256k1)
+        pub_raw = priv_raw.get_verifying_key()
+
+        priv = base58.b58encode(priv_raw.to_string()).decode()
+        pub = base58.b58encode(pub_raw.to_string()).decode()
+
+        e_priv = User._encrypt_priv(priv, password).decode()
+
+        return User(e_priv, pub)
 
     def to_json(self, indent=None):
         data = {
-            'pub': self.get_pub(),
-            'priv': self.get_priv_ept()
+            'pub': self.pub,
+            'priv': self.priv
         }
         return json.dumps(data, indent=indent)
 
     @staticmethod
     def from_json_without_hash(usr_dict, password):
-        priv_b = base58.b58decode(usr_dict['priv'])
-        pub_b = base58.b58decode(usr_dict['pub'])
-
-        user = User()
-        user.priv = (priv_b[0:16], priv_b[16:48], priv_b[48:64])
-        user.pub = VerifyingKey.from_string(pub_b, curve=SECP256k1)
-
-        return user
-
-    def get_pub(self):
-        return base58.b58encode(self.pub.to_string()).decode()
-
-    def get_priv(self, password):
-        priv = self._decrypt_priv(self.priv, password)
-        return base58.b58encode(priv.to_string()).decode()
-
-    def get_priv_ept(self):
-        return base58.b58encode(self.priv[0] + self.priv[1] + self.priv[2]).decode()
+        return User(usr_dict['priv'], usr_dict['pub'])
 
     def sign(self, msg, password):
         h = hlib.sha3_256(msg).digest()
-        priv = self._decrypt_priv(self.priv, password)
+
+        _priv = self._decrypt_priv(self.priv, password)
+        priv = SigningKey.from_string(base58.b58decode(_priv), curve=SECP256k1)
 
         return base58.b58encode(priv.sign(h)).decode()
 
     def verify(self, msg, sign):
         h = hlib.sha3_256(msg).digest()
-        self.pub.verify(base58.b58decode(sign), h)
 
-    @staticmethod
-    def verify_with_key(pub_str, msg, sign_str):
-        h = hlib.sha3_256(msg).digest()
-
-        pub = base58.b58decode(pub_str)
-        sign = base58.b58decode(sign_str)
-
-        pub_obj = VerifyingKey.from_string(pub, curve=SECP256k1)
-        pub_obj.verify(sign, h)
+        pub = VerifyingKey.from_string(base58.b58decode(self.pub), curve=SECP256k1)
+        pub.verify(base58.b58decode(sign), h)
 
 
 class Invoice:
@@ -258,18 +224,16 @@ class ProofOfWork:
         }
         blk = json.dumps(data).encode('ascii')
 
-        h = hlib.sha3_256(blk)
-        num = int.from_bytes(h.digest()[0:self.block.h_diff], byteorder='little')
+        h = hlib.sha3_256(blk).digest()
+        num_b = h[0:self.block.h_diff]
 
-        return (num, h)
+        return int.from_bytes(num_b, byteorder='little')
 
     def work_check_h(self, i):
-        num, _ = self.extract(i)
+        num = self.extract(i)
         factors = list(self.work.items())[i][1]
 
-        if num == self._primes_int(factors):
-            return True
-        return False
+        return True if (num == self._primes_int(factors)) else False
 
     def work_check(self):
         for i in range(self.block.v_diff):
