@@ -20,8 +20,8 @@ class User:
 
     @staticmethod
     def _encrypt_priv(priv, password):
-        hash = hlib.sha3_256(password.encode())
-        cipher = AES.new(hash.digest(), AES.MODE_GCM)
+        h = hlib.sha3_256(password.encode())
+        cipher = AES.new(h.digest(), AES.MODE_GCM)
 
         nonce = cipher.nonce
         ciphertext, tag = cipher.encrypt_and_digest(priv.to_string())
@@ -30,8 +30,8 @@ class User:
 
     @staticmethod
     def _decrypt_priv(e_priv, password):
-        hash = hlib.sha3_256(password.encode())
-        cipher = AES.new(hash.digest(), AES.MODE_GCM, nonce=e_priv[0])
+        h = hlib.sha3_256(password.encode())
+        cipher = AES.new(h.digest(), AES.MODE_GCM, nonce=e_priv[0])
 
         priv_raw = cipher.decrypt(e_priv[1])
         cipher.verify(e_priv[2])
@@ -249,10 +249,10 @@ class ProofOfWork:
         }
         blk = json.dumps(data).encode('ascii')
 
-        hash = hlib.sha3_256(blk)
-        num = int.from_bytes(hash.digest()[0:self.block.h_diff], byteorder='little')
+        h = hlib.sha3_256(blk)
+        num = int.from_bytes(h.digest()[0:self.block.h_diff], byteorder='little')
 
-        return (num, hash)
+        return (num, h)
 
     def work_check_h(self, i):
         num, _ = self.extract(i)

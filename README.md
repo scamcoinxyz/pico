@@ -1,3 +1,5 @@
+[![CodeFactor](https://www.codefactor.io/repository/github/architector1324/picocoin/badge)](https://www.codefactor.io/repository/github/architector1324/picocoin)
+
 # PicoCoin
 Tiny IOT-oriented CPU cryptocurrency written in [Python3](https://www.python.org/).
 
