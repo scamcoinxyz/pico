@@ -2,7 +2,7 @@ import json
 import base58
 import hashlib as hlib
 from functools import reduce
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from datetime import datetime as dt
 
 from Crypto.Cipher import AES
@@ -13,7 +13,54 @@ h_diff_init = 14
 block_confirms_count = 1
 
 
-class User:
+class JSONHashable:
+    @abstractmethod
+    def to_json(self, indent=None):
+        pass
+
+    @abstractmethod
+    def from_json_without_hash(obj_dict, *args, **kwargs):
+        pass
+
+    @classmethod
+    def from_json(cls, obj_json, *args, **kwargs):
+        data = json.loads(obj_json)
+        obj = cls.from_json_without_hash(data, *args, **kwargs)
+
+        expected_hash = data['hash']
+        if expected_hash != obj.hash().hexdigest():
+            raise json.JSONDecodeError('Invalid hash!', obj_json, 0)
+        return obj
+
+    def to_json_with_hash(self, indent=None):
+        data = json.loads(self.to_json(indent))
+        data['hash'] = self.hash().hexdigest()
+        return json.dumps(data, indent=indent)
+
+    def hash(self):
+        return hlib.sha3_256(self.to_json().encode('ascii'))
+
+
+class JSONSignable(JSONHashable):
+    @abstractmethod
+    def to_json_without_sign(self, indent=None):
+        pass
+
+    def sign(self, user, password):
+        self._sign = user.sign(self.to_json_without_sign().encode(), password)
+        return self._sign
+
+    def verify(self):
+        msg = self.to_json_without_sign().encode()
+        User.verify_with_key(self.from_adr, msg, self._sign)
+
+    def to_json(self, indent=None):
+        data = json.loads(self.to_json_without_sign(indent))
+        data['sign'] = self._sign
+        return json.dumps(data, indent=indent)
+
+
+class User(JSONHashable):
     def __init__(self):
         self.pub = None
         self.priv = None
@@ -63,20 +110,22 @@ class User:
 
         return user
 
-    @staticmethod
-    def from_json(usr_json, password):
-        data = json.loads(usr_json)
+    def to_json(self, indent=None):
+        data = {
+            'pub': self.get_pub(),
+            'priv': self.get_priv_ept()
+        }
+        return json.dumps(data, indent=indent)
 
-        priv_b = base58.b58decode(data['priv'])
-        pub_b = base58.b58decode(data['pub'])
+    @staticmethod
+    def from_json_without_hash(usr_dict, password):
+        priv_b = base58.b58decode(usr_dict['priv'])
+        pub_b = base58.b58decode(usr_dict['pub'])
 
         user = User()
         user.priv = (priv_b[0:16], priv_b[16:48], priv_b[48:64])
         user.pub = VerifyingKey.from_string(pub_b, curve=SECP256k1)
 
-        expected_hash = data['hash']
-        if expected_hash != user.hash().hexdigest():
-            raise json.JSONDecodeError('Invalid hash!', usr_json, 0)
         return user
 
     def get_pub(self):
@@ -108,21 +157,6 @@ class User:
 
         pub_obj = VerifyingKey.from_string(pub, curve=SECP256k1)
         pub_obj.verify(sign, h)
-
-    def to_json(self, indent=None):
-        data = {
-            'pub': self.get_pub(),
-            'priv': self.get_priv_ept()
-        }
-        return json.dumps(data, indent=indent)
-
-    def to_json_with_hash(self, indent=None):
-        data = json.loads(self.to_json(indent))
-        data['hash'] = self.hash().hexdigest()
-        return json.dumps(data, indent=indent)
-
-    def hash(self):
-        return hlib.sha3_256(self.to_json().encode('ascii'))
 
 
 class Invoice:
@@ -167,7 +201,7 @@ class Message:
         return Message(data['msg'])
 
 
-class Transaction:
+class Transaction(JSONSignable):
     def __init__(self, from_adr, to_adr, act):
         self.time = dt.utcnow()
         self.from_adr = from_adr
@@ -175,15 +209,7 @@ class Transaction:
         self.act = act
         self._sign = None
 
-    def sign(self, user, password):
-        self._sign = user.sign(self.to_json().encode(), password)
-        return self._sign
-
-    def verify(self):
-        msg = self.to_json().encode()
-        User.verify_with_key(self.from_adr, msg, self._sign)
-
-    def to_json(self, indent=None):
+    def to_json_without_sign(self, indent=None):
         data = {
             'time': str(self.time),
             'from': self.from_adr,
@@ -193,39 +219,22 @@ class Transaction:
         return json.dumps(data, indent=indent)
 
     @staticmethod
-    def from_json(trans_json):
-        data = json.loads(trans_json)
-        act_str = list(data['act'].items())[0][0]
+    def from_json_without_hash(trans_dict):
+        act_str = list(trans_dict['act'].items())[0][0]
 
         # create transaction
         act = {
             'ivc': Invoice,
             'pay': Payment,
             'msg': Message
-        }[act_str].from_json(json.dumps(data['act']))
+        }[act_str].from_json(json.dumps(trans_dict['act']))
 
-        trans = Transaction(data['from'], data['to'], act)
-        trans.time = data['time']
-        trans._sign = data['sign']
+        trans = Transaction(trans_dict['from'], trans_dict['to'], act)
+        trans.time = trans_dict['time']
+        trans._sign = trans_dict['sign']
         trans.verify()
 
-        expected_hash = data['hash']
-        if expected_hash != trans.hash().hexdigest():
-            raise json.JSONDecodeError('Invalid hash!', trans_json, 0)
         return trans
-
-    def to_json_with_sign(self, indent=None):
-        data = json.loads(self.to_json(indent))
-        data['sign'] = self._sign
-        return json.dumps(data, indent=indent)
-
-    def to_json_with_hash(self, indent=None):
-        data = json.loads(self.to_json_with_sign(indent))
-        data['hash'] = self.hash().hexdigest()
-        return json.dumps(data, indent=indent)
-
-    def hash(self):
-        return hlib.sha3_256(self.to_json_with_sign().encode('ascii'))
 
 
 class ProofOfWork:
@@ -269,7 +278,7 @@ class ProofOfWork:
         return True
 
 
-class Block:
+class Block(JSONHashable):
     def __init__(self, h_diff, prev_block_hash, solver):
         self.prev = prev_block_hash
         self.time = dt.utcnow()
@@ -292,25 +301,20 @@ class Block:
         return self.pow.work_check()
 
     @staticmethod
-    def from_json(block_json):
-        data = json.loads(block_json)
-
-        prev = data['prev']
-        time = data['time']
-        h_diff = data['h_diff']
-        v_diff = data['v_diff']
-        solver = data['pow']['solver']
+    def from_json_without_hash(block_dict):
+        prev = block_dict['prev']
+        time = block_dict['time']
+        h_diff = block_dict['h_diff']
+        v_diff = block_dict['v_diff']
+        solver = block_dict['pow']['solver']
 
         block = Block(h_diff, prev, solver)
         block.time = time
         block.v_diff = v_diff
-        block.trans = {h: Transaction.from_json(json.dumps(t)) for h, t in data['trans'].items()}
+        block.trans = {h: Transaction.from_json(json.dumps(t)) for h, t in block_dict['trans'].items()}
         block.pow = ProofOfWork(block, solver)
-        block.pow.work = data['pow']['work']
+        block.pow.work = block_dict['pow']['work']
 
-        expected_hash = data['hash']
-        if expected_hash != block.hash().hexdigest():
-            raise json.JSONDecodeError('Invalid hash!', block_json, 0)
         return block
 
     def to_json(self, indent=None):
@@ -327,16 +331,8 @@ class Block:
         }
         return json.dumps(data, indent=indent)
 
-    def to_json_with_hash(self, indent=None):
-        data = json.loads(self.to_json(indent))
-        data['hash'] = self.hash().hexdigest()
-        return json.dumps(data, indent=indent)
 
-    def hash(self):
-        return hlib.sha3_256(self.to_json().encode('ascii'))
-
-
-class Blockchain:
+class Blockchain(JSONHashable):
     def __init__(self, ver):
         self.coin = 'PicoCoin'
         self.ver = ver
@@ -379,28 +375,15 @@ class Blockchain:
         return json.dumps(data, indent=indent)
 
     @staticmethod
-    def from_json(chain_json):
-        data = json.loads(chain_json)
-
-        coin = data['coin']
-        ver = data['ver']
+    def from_json_without_hash(chain_obj):
+        coin = chain_obj['coin']
+        ver = chain_obj['ver']
 
         chain = Blockchain(ver)
         chain.coin = coin
-        chain.blocks = {h: Block.from_json(json.dumps(b)) for h, b in data['blocks'].items()}
+        chain.blocks = {h: Block.from_json(json.dumps(b)) for h, b in chain_obj['blocks'].items()}
 
-        expected_hash = data['hash']
-        if expected_hash != chain.hash().hexdigest():
-            raise json.JSONDecodeError('Invalid hash!', chain_json, 0)
         return chain
-
-    def to_json_with_hash(self, indent=None):
-        data = json.loads(self.to_json(indent))
-        data['hash'] = self.hash().hexdigest()
-        return json.dumps(data, indent=indent)
-
-    def hash(self):
-        return hlib.sha3_256(self.to_json().encode('ascii'))
 
 
 class Core:
