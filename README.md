@@ -9,24 +9,74 @@ Dependencies:
 * [ecdsa](https://pypi.org/project/ecdsa/)
 * [sympy](https://pypi.org/project/sympy/)
 
-
 ### Features
 * Tiny crossplatform blockchain platform with minimum dependencies.
 * All data represents in [json](https://en.wikipedia.org/wiki/JSON) format.
+* Modern [ipv6](https://en.wikipedia.org/wiki/IPv6) internet protocol. [See `Notes: 1`]
 * Modern [sha-3](https://en.wikipedia.org/wiki/SHA-3) hashing algorithm and [ECC](https://en.wikipedia.org/wiki/Elliptic-curve_cryptography).
-* Hard to parallel mining algorithm (recursive sequence of [integers factorization](https://en.wikipedia.org/wiki/Integer_factorization)). [See `Notes: 1`]
-* 2D difficulty. [See `Notes: 2`].
-* All miners earn coins. [See `Notes: 3`].
-* Block solver protection. [See `Notes: 4`].
+* Hard to parallel mining algorithm (recursive sequence of [integers factorization](https://en.wikipedia.org/wiki/Integer_factorization)). [See `Notes: 2`]
+* 2D difficulty. [See `Notes: 3`].
+* All miners earn coins. [See `Notes: 4`].
+* Block solver protection. [See `Notes: 5`].
 * Oriented to use in weak computing devices like [Orange PI](http://www.orangepi.org/orangepizero/) or [RPI](https://www.raspberrypi.org/).
 * Transactions can be used for coins transfer, send messages or some device actions. For example, turn on the smart lamp ([IOT](https://en.wikipedia.org/wiki/Internet_of_things)).
 
 Notes:
-1. Cores count has no advantage. Single core compute power is more important.
-2. **Horizontal** difficulty for factorization and **vertical** for recurse depth (see `Mining algorithm`).
-3. All miners get a piece of reward for their work, if they done it before the next block will be solved (see `Analysis.Mining reward`).
-4. Mining algorithm designed in as such way that **proof of work** is related to **block solver**. To cheat it you have to redone all work again (see `Mining algorithm`).
+1. Now using [Teredo](https://en.wikipedia.org/wiki/Teredo_tunneling) tunneling for emulating ipv6 over ipv4.
+2. Cores count has no advantage. Single core compute power is more important.
+3. **Horizontal** difficulty for factorization and **vertical** for recurse depth (see `Mining algorithm`).
+4. All miners get a piece of reward for their work, if they done it before the next block will be solved (see `Analysis.Mining reward`).
+5. Mining algorithm designed in as such way that **proof of work** is related to **block solver**. To cheat it you have to redone all work again (see `Mining algorithm`).
 
+
+[Pico](https://en.wikipedia.org/wiki/Pico-) is a unit prefix in the metric system denoting a factor of 1 trillionth (`10 ^ (-12)`).
+Coin name is consistent with its purpose - to work on small computing devices.
+
+### How to install
+#### Linux
+
+1. Clone the repo:
+
+```bash
+git clone https://github.com/architector1324/PicoCoin
+```
+
+2. Install [miredo](https://en.wikipedia.org/wiki/Miredo) for ipv6 tunneling:
+```bash
+sudo apt install miredo
+```
+
+3. Get python dependencies:
+```bash
+pip3 install base58 pycryptodome ecdsa sympy
+```
+
+4. Run cli:
+```bash
+cd PicoCoin
+python3 pico-cli.py -h
+```
+
+#### Windows
+There may be some problems with ipv6 tunneling. So it's recommended to use **unix-like** systems (like Linux, BSD, etc..).
+
+1. Clone the repo:
+```bash
+git.exe clone https://github.com/architector1324/PicoCoin
+```
+
+2. Enable [teredo](https://letmegooglethat.com/?q=how+to+enable+teredo+windows+10) in Windows for ipv6 tunneling.
+
+3. Get python dependencies:
+```bash
+pip3.exe install base58 pycryptodome ecdsa sympy
+```
+
+4. Run cli:
+```bash
+cd .\PicoCoin
+python3.exe .\pico-cli.py -h
+```
 
 ### JSON API
 

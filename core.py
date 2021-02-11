@@ -1,6 +1,8 @@
 import json
 import base58
+import socket
 import hashlib as hlib
+
 from functools import reduce
 from abc import abstractmethod
 from datetime import datetime as dt
@@ -350,6 +352,14 @@ class Blockchain(JSONHashable):
         return chain
 
 
-class Core:
+class Net(JSONHashable):
     def __init__(self):
-        pass
+        self.peers = []
+        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+
+    def add_peer(self, ipv6, port):
+        data = {
+            'ipv6': ipv6,
+            'port': port
+        }
+        self.peers.append(data)
