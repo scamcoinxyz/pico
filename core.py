@@ -355,8 +355,8 @@ class Blockchain(JSONHashable):
 class Net(JSONHashable):
     def __init__(self):
         self.peers = []
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind(('127.0.0.1', 10000))
+        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        self.sock.bind(('::1', 10000))
 
     def add_peer(self, ipv6, port):
         data = {
@@ -366,7 +366,7 @@ class Net(JSONHashable):
         self.peers.append(data)
 
     def send(self, data):
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as sock:
             for peer in self.peers:
                 sock.sendto(data, (peer['ipv6'], peer['port']))
 

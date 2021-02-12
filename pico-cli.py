@@ -15,6 +15,8 @@ def login(user_json):
         try:
             passwd = get_pass()
             return User.from_json(user_json, passwd)
+        except KeyboardInterrupt:
+            exit()
         except:
             print('Invalid password!')
 
@@ -23,13 +25,16 @@ def register():
     print('No user presented, register new one.')
 
     while True:
-        passwd0 = get_pass()
-        passwd1 = get_pass('Repeat password:')
+        try:
+            passwd0 = get_pass()
+            passwd1 = get_pass('Repeat password:')
 
-        if passwd0 == passwd1:
-            return User.create(passwd0)
+            if passwd0 == passwd1:
+                return User.create(passwd0)
 
-        print('Passwords mismatch, please, try again.')
+            print('Passwords mismatch, please, try again.')
+        except KeyboardInterrupt:
+            exit()
 
 
 if __name__ == '__main__':
