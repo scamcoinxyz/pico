@@ -3,7 +3,7 @@ import os.path
 from getpass import getpass
 
 from miner import Miner
-from core import User, Block, Blockchain, Transaction, Invoice, Payment, Message
+from core import User, Net, Blockchain, Block , Transaction, Invoice, Payment, Message
 
 
 def get_pass(prompt='Password: '):
@@ -36,11 +36,24 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='python3 pico-cli.py', description='PicoCoin core cli.')
     parser.add_argument('--usr', type=str, default='user.json', help='path to user keys')
     parser.add_argument('--chain', type=str, default='blockchain.json', help='path to blockchain')
+    parser.add_argument('--peers', type=str, default='peers.json', help='path to peers')
     parser.add_argument('--mining',  type=bool, default=False, help='work as mining server')
     parser.add_argument('--adr',  type=str, default='127.0.0.1', help='server listen address (default: "127.0.0.1")')
     parser.add_argument('--trans', nargs=3, metavar=('to', 'act', 'args'), help='make a transaction')
 
     args = parser.parse_args()
+
+    # peers
+    net = None
+
+    if os.path.exists(args.peers):
+        with open(args.peers, 'r') as f:
+            net = Net.from_json(f.read())
+    else:
+        # FIXME: fetch peers from another node
+        net = Net()
+        with open('peers.json', 'w') as f:
+            f.write(net.to_json_with_hash(indent=4))
 
     # user
     user = None
@@ -101,11 +114,14 @@ if __name__ == '__main__':
 
     if trans is not None:
         block.add_trans(trans)
+        net.send_trans(trans)
 
     # mining
     miner.set_block(block)
     miner.work()
+
     chain.add_block(block)
+    net.send_block(block)
 
     print(f'solved: reward {block.reward()} picocoins.')
 
