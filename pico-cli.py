@@ -65,6 +65,14 @@ if __name__ == '__main__':
             net_json = json.dumps(net.to_dict(), indent=4)
             f.write(net_json)
 
+    # update peers
+    net.update_peer(net.ipv6, 10000)
+    net.send({'peer': {'ipv6': net.ipv6, 'port': 10000}})
+
+    with open('peers.json', 'w') as f:
+            net_json = json.dumps(net.to_dict(), indent=4)
+            f.write(net_json)
+
     # user
     user = None
 
@@ -143,6 +151,19 @@ if __name__ == '__main__':
     while True:
         data = net.recv()
 
+        # add peer
+        if data.get('peer') is not None:
+            ipv6 = data['peer']['ipv6']
+            port = data['peer']['port']
+
+            if net.update_peer(ipv6, port):
+                print(f"Peer {ipv6} {port} added.")
+
+            with open('peers.json', 'w') as f:
+                net_json = json.dumps(net.to_dict(), indent=4)
+                f.write(net_json)
+
+        # add block
         if data.get('block') is not None:
             block = Block.from_dict(data['block'])
             if block.work_check():
