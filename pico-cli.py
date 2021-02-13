@@ -55,8 +55,10 @@ if __name__ == '__main__':
         with open(args.peers, 'r') as f:
             net = Net.from_json(f.read())
     else:
-        # FIXME: fetch peers from another node
         net = Net()
+        net.add_peer('2002:c257:6f39::1', 10000)
+        net.add_peer('2002:c257:65d4::1', 10000)
+
         with open('peers.json', 'w') as f:
             f.write(net.to_json_with_hash(indent=4))
 
