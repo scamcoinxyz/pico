@@ -43,7 +43,7 @@ if __name__ == '__main__':
     parser.add_argument('--usr', type=str, default='user.json', help='path to user keys')
     parser.add_argument('--chain', type=str, default='blockchain.json', help='path to blockchain')
     parser.add_argument('--peers', type=str, default='peers.json', help='path to peers')
-    parser.add_argument('--mining',  type=bool, default=False, help='work as mining server')
+    parser.add_argument('--mining', action='store_true', help='work as mining server')
     parser.add_argument('--adr',  type=str, default='127.0.0.1', help='server listen address (default: "127.0.0.1")')
     parser.add_argument('--trans', nargs=3, metavar=('to', 'act', 'args'), help='make a transaction')
 
@@ -122,31 +122,30 @@ if __name__ == '__main__':
         else:
             trans = None
 
-    # if args.mining:
-    #     # miner
-    #     miner = Miner()
+    if args.mining:
+        # miner
+        miner = Miner()
 
-    #     # block
-    #     prev = chain.last_block()
-    #     block = None
+        # block
+        prev = chain.last_block()
+        block = None
 
-    #     if prev is not None:
-    #         h_diff = prev.h_diff + (1 if chain.blocks_count() % 10000 == 0 else 0)
-    #         block = Block(h_diff, prev.hash().hexdigest(), user.pub)
-    #     else:
-    #         block = Block(14, None, user.pub)
+        if prev is not None:
+            h_diff = prev.h_diff + (1 if chain.blocks_count() % 10000 == 0 else 0)
+            block = Block(h_diff, prev.hash().hexdigest(), user.pub)
+        else:
+            block = Block(14, None, user.pub)
 
-    #     if trans is not None:
-    #         block.add_trans(trans)
+        if trans is not None:
+            block.add_trans(trans)
 
-    #     mining
-    #     miner.set_block(block)
-    #     miner.work()
+        # mining
+        miner.set_block(block)
+        miner.work()
+        print(f'Block {block.hash().hexdigest()[0:12]} solved: reward {block.reward()} picocoins.')
 
-    #     chain.add_block(block)
-    #     net.send({'block': block.to_dict()})
-
-    #     print(f'solved: reward {block.reward()} picocoins.')
+        chain.add_block(block)
+        net.send({'block': block.to_dict()})
 
     while True:
         data = net.recv()
@@ -166,7 +165,8 @@ if __name__ == '__main__':
         # add block
         if data.get('block') is not None:
             block = Block.from_dict(data['block'])
-            if block.work_check():
+
+            if block.work_check() and chain.get_block(block.hash().hexdigest()) is None:
                 net.send({'block': block.to_dict()})
 
             if chain.add_block(block):

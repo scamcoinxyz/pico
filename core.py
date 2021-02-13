@@ -308,7 +308,7 @@ class Blockchain(DictHashable):
 
         # reject block if pow fails or block is already in blockchain
         if not block.work_check():
-            print(f'Block {h[0:12]} rejected: pow fails.')
+            print(f'Block {h[0:12]} rejected: proof of work was failed.')
             return
 
         if self.blocks.get(h) is not None:
@@ -331,6 +331,9 @@ class Blockchain(DictHashable):
             print(f'Block {h[0:12]} accepted to blockchain.')
             return True
         return False
+
+    def get_block(self, block_hash):
+        return self.blocks.get(block_hash)
 
     def last_block(self):
         try:
