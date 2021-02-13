@@ -17,55 +17,56 @@ h_diff_init = 14
 block_confirms_count = 1
 
 
-class JSONHashable:
+class DictHashable:
     @abstractmethod
-    def to_json(self, indent=None):
+    def to_dict_without_hash(self):
         pass
 
     @abstractmethod
-    def from_json_without_hash(obj_dict, *args, **kwargs):
+    def from_dict_without_hash(obj_dict,*args, **kwargs):
         pass
 
     @classmethod
-    def from_json(cls, obj_json, *args, **kwargs):
-        data = json.loads(obj_json)
-        obj = cls.from_json_without_hash(data, *args, **kwargs)
+    def from_dict(cls, obj_dict, *args, **kwargs):
+        obj = cls.from_dict_without_hash(obj_dict, *args, **kwargs)
 
-        expected_hash = data['hash']
+        expected_hash = obj_dict['hash']
         if expected_hash != obj.hash().hexdigest():
-            raise json.JSONDecodeError('Invalid hash!', obj_json, 0)
+            raise ValueError('Invalid hash!', obj_dict)
         return obj
 
-    def to_json_with_hash(self, indent=None):
-        data = json.loads(self.to_json(indent))
-        data['hash'] = self.hash().hexdigest()
-        return json.dumps(data, indent=indent)
+    def to_dict(self):
+        d = self.to_dict_without_hash()
+        d['hash'] = self.hash().hexdigest()
+        return d
 
     def hash(self):
-        return hlib.sha3_256(self.to_json().encode('ascii'))
+        self_json = json.dumps(self.to_dict_without_hash()).encode('utf-8')
+        return hlib.sha3_256(self_json)
 
 
-class JSONSignable(JSONHashable):
+class DictSignable(DictHashable):
     @abstractmethod
-    def to_json_without_sign(self, indent=None):
+    def to_dict_without_sign(self):
         pass
 
     def sign(self, user, password):
-        self._sign = user.sign(self.to_json_without_sign().encode(), password)
+        msg = json.dumps(self.to_dict_without_sign()).encode()
+        self._sign = user.sign(msg, password)
         return self._sign
 
     def verify(self):
-        msg = self.to_json_without_sign().encode()
+        msg = json.dumps(self.to_dict_without_sign()).encode()
         user = User(None, self.from_adr)
         user.verify(msg, self._sign)
 
-    def to_json(self, indent=None):
-        data = json.loads(self.to_json_without_sign(indent))
-        data['sign'] = self._sign
-        return json.dumps(data, indent=indent)
+    def to_dict_without_hash(self):
+        d = self.to_dict_without_sign()
+        d['sign'] = self._sign
+        return d
 
 
-class User(JSONHashable):
+class User(DictHashable):
     def __init__(self, priv, pub):
         self.priv = priv
         self.pub = pub
@@ -103,15 +104,15 @@ class User(JSONHashable):
 
         return User(e_priv, pub)
 
-    def to_json(self, indent=None):
+    def to_dict_without_hash(self):
         data = {
             'pub': self.pub,
             'priv': self.priv
         }
-        return json.dumps(data, indent=indent)
+        return data
 
     @staticmethod
-    def from_json_without_hash(usr_dict, password):
+    def from_dict_without_hash(usr_dict, password):
         return User(usr_dict['priv'], usr_dict['pub'])
 
     def sign(self, msg, password):
@@ -133,45 +134,39 @@ class Invoice:
     def __init__(self, amount):
         self.amount = amount
 
-    def to_json(self, indent=None):
-        data = {'ivc': self.amount}
-        return json.dumps(data, indent=indent)
+    def to_dict(self):
+        return {'ivc': self.amount}
 
     @staticmethod
-    def from_json(ivc_json):
-        data = json.loads(ivc_json)
-        return Invoice(int(data['ivc']))
+    def from_dict(ivc_dict):
+        return Invoice(int(ivc_dict['ivc']))
 
 
 class Payment:
     def __init__(self, amount):
         self.amount = amount
 
-    def to_json(self, indent=None):
-        data = {'pay': self.amount}
-        return json.dumps(data, indent=indent)
+    def to_dict(self):
+        return {'pay': self.amount}
 
     @staticmethod
-    def from_json(pay_json):
-        data = json.loads(pay_json)
-        return Payment(int(data['pay']))
+    def from_dict(pay_dict):
+        return Payment(int(pay_dict['pay']))
 
 
 class Message:
     def __init__(self, msg):
         self.msg = msg
 
-    def to_json(self, indent=None):
-        data = {'msg': self.msg}
-        return json.dumps(data, indent=indent)
+    def to_dict(self, indent=None):
+        return {'msg': self.msg}
 
     @staticmethod
-    def from_json(msg_json):
-        data = json.loads(msg_json)
-        return Message(data['msg'])
+    def from_dict(msg_dict):
+        return Message(msg_dict['msg'])
 
 
-class Transaction(JSONSignable):
+class Transaction(DictSignable):
     def __init__(self, from_adr, to_adr, act):
         self.time = dt.utcnow()
         self.from_adr = from_adr
@@ -179,17 +174,17 @@ class Transaction(JSONSignable):
         self.act = act
         self._sign = None
 
-    def to_json_without_sign(self, indent=None):
+    def to_dict_without_sign(self, indent=None):
         data = {
             'time': str(self.time),
             'from': self.from_adr,
             'to': self.to_adr,
-            'act': json.loads(self.act.to_json())
+            'act': self.act.to_dict()
         }
-        return json.dumps(data, indent=indent)
+        return data
 
     @staticmethod
-    def from_json_without_hash(trans_dict):
+    def from_dict_without_hash(trans_dict):
         act_str = list(trans_dict['act'].items())[0][0]
 
         # create transaction
@@ -197,7 +192,7 @@ class Transaction(JSONSignable):
             'ivc': Invoice,
             'pay': Payment,
             'msg': Message
-        }[act_str].from_json(json.dumps(trans_dict['act']))
+        }[act_str].from_dict(trans_dict['act'])
 
         trans = Transaction(trans_dict['from'], trans_dict['to'], act)
         trans.time = trans_dict['time']
@@ -221,12 +216,12 @@ class ProofOfWork:
         self.work[num] = factors
 
     def extract(self, i):
-        data = json.loads(self.block.to_json())
+        data = self.block.to_dict_without_hash()
         data['pow'] = {
             'solver': self.solver,
             'work': {n: f for n, f in list(self.work.items())[0:i]}
         }
-        blk = json.dumps(data).encode('ascii')
+        blk = json.dumps(data).encode('utf-8')
 
         h = hlib.sha3_256(blk).digest()
         num_b = h[0:self.block.h_diff]
@@ -246,7 +241,7 @@ class ProofOfWork:
         return True
 
 
-class Block(JSONHashable):
+class Block(DictHashable):
     def __init__(self, h_diff, prev_block_hash, solver):
         self.prev = prev_block_hash
         self.time = dt.utcnow()
@@ -269,7 +264,7 @@ class Block(JSONHashable):
         return self.pow.work_check()
 
     @staticmethod
-    def from_json_without_hash(block_dict):
+    def from_dict_without_hash(block_dict):
         prev = block_dict['prev']
         time = block_dict['time']
         h_diff = block_dict['h_diff']
@@ -279,28 +274,28 @@ class Block(JSONHashable):
         block = Block(h_diff, prev, solver)
         block.time = time
         block.v_diff = v_diff
-        block.trans = {h: Transaction.from_json(json.dumps(t)) for h, t in block_dict['trans'].items()}
+        block.trans = {h: Transaction.from_dict(t) for h, t in block_dict['trans'].items()}
         block.pow = ProofOfWork(block, solver)
         block.pow.work = block_dict['pow']['work']
 
         return block
 
-    def to_json(self, indent=None):
+    def to_dict_without_hash(self, indent=None):
         data = {
             'prev': self.prev,
             'time': str(self.time),
             'h_diff': self.h_diff,
             'v_diff': self.v_diff,
-            'trans': {h: json.loads(t.to_json_with_hash(indent)) for h, t in self.trans.items()},
+            'trans': {h: t.to_dict() for h, t in self.trans.items()},
             'pow': {
                 'solver': self.pow.solver,
                 'work': self.pow.work
             }
         }
-        return json.dumps(data, indent=indent)
+        return data
 
 
-class Blockchain(JSONHashable):
+class Blockchain(DictHashable):
     def __init__(self, ver):
         self.coin = 'PicoCoin'
         self.ver = ver
@@ -334,22 +329,22 @@ class Blockchain(JSONHashable):
     def blocks_count(self):
         return len(self.blocks.items())
 
-    def to_json(self, indent=None):
+    def to_dict_without_hash(self):
         data = {
             'coin': self.coin,
             'ver': self.ver,
-            'blocks': {h: json.loads(b.to_json_with_hash(indent)) for h, b in self.blocks.items()},
+            'blocks': {h: b.to_dict() for h, b in self.blocks.items()},
         }
-        return json.dumps(data, indent=indent)
+        return data
 
     @staticmethod
-    def from_json_without_hash(chain_obj):
+    def from_dict_without_hash(chain_obj):
         coin = chain_obj['coin']
         ver = chain_obj['ver']
 
         chain = Blockchain(ver)
         chain.coin = coin
-        chain.blocks = {h: Block.from_json(json.dumps(b)) for h, b in chain_obj['blocks'].items()}
+        chain.blocks = {h: Block.from_dict(b) for h, b in chain_obj['blocks'].items()}
 
         return chain
 
@@ -365,10 +360,11 @@ class NetUDPServer(socketserver.ThreadingMixIn, socketserver.UDPServer):
 class NetUDPHandler(socketserver.BaseRequestHandler):
     def handle(self):
         data, _ = self.request
-        self.server.net.recv(data)
+        data_dict = json.loads(data)
+        self.server.net.recv(data_dict)
 
 
-class Net(JSONHashable):
+class Net(DictHashable):
     def __init__(self):
         self.trans_queue = Queue()
         self.block_queue = Queue()
@@ -383,44 +379,39 @@ class Net(JSONHashable):
         }
         self.peers.append(data)
 
-    def send(self, data):
+    def send(self, data_dict):
+        data_json = json.dumps(data_dict).encode()
+
         for peer in self.peers:
             with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as sock:
-                sock.sendto(data, (peer['ipv6'], peer['port']))
+                sock.sendto(data_json, (peer['ipv6'], peer['port']))
 
-    def recv(self, data):
-        data_dict = json.loads(data)
-
+    def recv(self, data_dict):
         if data_dict.get('trans') is not None:
-            trans_json = json.dumps(data_dict['trans'])
-            trans = Transaction.from_json(trans_json)
-            print(trans_json)
+            trans = Transaction.from_dict(data_dict['trans'])
+            print(trans.to_dict())
             self.trans_queue.put(trans)
         elif data_dict.get('block') is not None:
-            block_json = json.dumps(data_dict['block'])
-            block = Block.from_json(block_json)
-            print(block_json)
+            block = Block.from_dict(data_dict['block'])
+            print(block.to_dict())
             self.block_queue.put(block)
 
     def send_trans(self, trans):
         data = {
-            'trans': json.loads(trans.to_json_with_hash())
+            'trans': trans.to_dict()
         }
-        self.send(json.dumps(data).encode())
+        self.send(data)
 
     def send_block(self, block):
         data = {
-            'block': json.loads(block.to_json_with_hash())
+            'block': block.to_dict()
         }
-        self.send(json.dumps(data).encode())
+        self.send(data)
 
-    def to_json(self, indent=None):
-        data = {
-            'peers': self.peers
-        }
-        return json.dumps(data, indent=indent)
+    def to_dict_without_hash(self):
+        return {'peers': self.peers}
 
-    def from_json_without_hash(obj_dict, *args, **kwargs):
+    def from_dict_without_hash(obj_dict, *args, **kwargs):
         net = Net()
         net.peers = obj_dict['peers']
         return net

@@ -1,20 +1,21 @@
+import json
 import argparse
 import os.path
 from getpass import getpass
 
 from miner import Miner
-from core import User, Net, Blockchain, Block , Transaction, Invoice, Payment, Message
+from core import User, Net, Transaction, Invoice, Payment, Message, Block, Blockchain
 
 
 def get_pass(prompt='Password: '):
     return getpass(prompt)
 
 
-def login(user_json):
+def login(usr_dict):
     while True:
         try:
             passwd = get_pass()
-            return User.from_json(user_json, passwd)
+            return User.from_dict(usr_dict, passwd)
         except KeyboardInterrupt:
             exit()
         except:
@@ -53,37 +54,43 @@ if __name__ == '__main__':
 
     if os.path.exists(args.peers):
         with open(args.peers, 'r') as f:
-            net = Net.from_json(f.read())
+            net_dict = json.loads(f.read())
+            net = Net.from_dict(net_dict)
     else:
         net = Net()
         net.add_peer('2002:c257:6f39::1', 10000)
         net.add_peer('2002:c257:65d4::1', 10000)
 
         with open('peers.json', 'w') as f:
-            f.write(net.to_json_with_hash(indent=4))
+            net_json = json.dumps(net.to_dict(), indent=4)
+            f.write(net_json)
 
     # user
     user = None
 
     if os.path.exists(args.usr):
         with open(args.usr, 'r') as f:
-            user = login(f.read())
+            usr_dict = json.loads(f.read())
+            user = login(usr_dict)
     else:
         user = register()
         with open(args.usr, 'w') as f:
-            f.write(user.to_json_with_hash(indent=4))
+            usr_json = json.dumps(user.to_dict(), indent=4)
+            f.write(usr_json)
 
     # blockchain
     chain = None
 
     if os.path.exists(args.chain):
         with open(args.chain, 'r') as f:
-            chain = Blockchain.from_json(f.read())
+            chain_dict = json.loads(f.read())
+            chain = Blockchain.from_dict(chain_dict)
     else:
         # FIXME: fetch blockchain from another node
         chain = Blockchain('0.1')
         with open('blockchain.json', 'w') as f:
-            f.write(chain.to_json_with_hash(indent=4))
+            chain_json = json.dumps(chain.to_dict(), indent=4)
+            f.write(chain_json)
 
     # miner
     miner = Miner()
@@ -105,7 +112,7 @@ if __name__ == '__main__':
         ans = input('Do u want to make a transaction? [y/n]: ')
         if ans in ('y', 'Y'):
             trans.sign(user, get_pass())
-            print(trans.to_json_with_hash())
+            print(trans.to_dict())
         else:
             trans = None
 
@@ -125,7 +132,7 @@ if __name__ == '__main__':
 
     net.server.serve_forever()
 
-    # # mining
+    # mining
     # miner.set_block(block)
     # miner.work()
 
@@ -135,4 +142,5 @@ if __name__ == '__main__':
     # print(f'solved: reward {block.reward()} picocoins.')
 
     # with open('blockchain.json', 'w') as f:
-    #     f.write(chain.to_json_with_hash(indent=4))
+    #     chain_json = json.dumps(chain.to_dict(), indent=4)
+    #     f.write(chain_json)
