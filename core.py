@@ -366,6 +366,8 @@ class Net(DictHashable):
     def __init__(self):
         self.peers = []
 
+        self._get_ipv6()
+
         self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
         self.sock.bind(('::0', 10000))
         self.sock.setblocking(False)
@@ -377,10 +379,20 @@ class Net(DictHashable):
         }
         self.peers.append(data)
 
+    def _get_ipv6(self):
+        # google dns
+        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        self.sock.connect(("2001:4860:4860::8888", 80))
+        self.ipv6 = self.sock.getsockname()[0]
+        self.sock.close()
+
     def send(self, data_dict):
         data_json = json.dumps(data_dict).encode()
 
         for peer in self.peers:
+            if peer['ipv6'] == self.ipv6:
+                continue
+ 
             with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as sock:
                 sock.sendto(data_json, (peer['ipv6'], peer['port']))
 
