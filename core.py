@@ -1,8 +1,10 @@
 import json
 import base58
 import socket
+import socketserver
 import hashlib as hlib
 
+from queue import Queue
 from functools import reduce
 from abc import abstractmethod
 from datetime import datetime as dt
@@ -352,11 +354,27 @@ class Blockchain(JSONHashable):
         return chain
 
 
+class NetUDPServer(socketserver.ThreadingMixIn, socketserver.UDPServer):
+    address_family = socket.AF_INET6
+
+    def __init__(self, net, server_address, RequestHandlerClass, bind_and_activate=True):
+        self.net = net
+        super().__init__(server_address, RequestHandlerClass, bind_and_activate=bind_and_activate)
+
+
+class NetUDPHandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        data, _ = self.request
+        self.server.net.recv(data)
+
+
 class Net(JSONHashable):
     def __init__(self):
+        self.trans_queue = Queue()
+        self.block_queue = Queue()
+
         self.peers = []
-        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
-        self.sock.bind(('::1', 10000))
+        self.server = NetUDPServer(self, ('::0', 10000), NetUDPHandler)
 
     def add_peer(self, ipv6, port):
         data = {
@@ -366,9 +384,23 @@ class Net(JSONHashable):
         self.peers.append(data)
 
     def send(self, data):
-        with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as sock:
-            for peer in self.peers:
+        for peer in self.peers:
+            with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as sock:
                 sock.sendto(data, (peer['ipv6'], peer['port']))
+
+    def recv(self, data):
+        data_dict = json.loads(data)
+
+        if data_dict.get('trans') is not None:
+            trans_json = json.dumps(data_dict['trans'])
+            trans = Transaction.from_json(trans_json)
+            print(trans_json)
+            self.trans_queue.put(trans)
+        elif data_dict.get('block') is not None:
+            block_json = json.dumps(data_dict['block'])
+            block = Block.from_json(block_json)
+            print(block_json)
+            self.block_queue.put(block)
 
     def send_trans(self, trans):
         data = {
@@ -394,4 +426,4 @@ class Net(JSONHashable):
         return net
 
     def __del__(self):
-        self.sock.close()
+        self.server.server_close()

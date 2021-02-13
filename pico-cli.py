@@ -123,14 +123,16 @@ if __name__ == '__main__':
         block.add_trans(trans)
         net.send_trans(trans)
 
-    # mining
-    miner.set_block(block)
-    miner.work()
+    net.server.serve_forever()
 
-    chain.add_block(block)
-    net.send_block(block)
+    # # mining
+    # miner.set_block(block)
+    # miner.work()
 
-    print(f'solved: reward {block.reward()} picocoins.')
+    # chain.add_block(block)
+    # net.send_block(block)
 
-    with open('blockchain.json', 'w') as f:
-        f.write(chain.to_json_with_hash(indent=4))
+    # print(f'solved: reward {block.reward()} picocoins.')
+
+    # with open('blockchain.json', 'w') as f:
+    #     f.write(chain.to_json_with_hash(indent=4))
