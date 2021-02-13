@@ -92,9 +92,6 @@ if __name__ == '__main__':
             chain_json = json.dumps(chain.to_dict(), indent=4)
             f.write(chain_json)
 
-    # miner
-    miner = Miner()
-
     # transactions
     trans = None
     if args.trans is not None:
@@ -112,35 +109,46 @@ if __name__ == '__main__':
         ans = input('Do u want to make a transaction? [y/n]: ')
         if ans in ('y', 'Y'):
             trans.sign(user, get_pass())
+            net.send({'trans': trans.to_dict()})
             print(trans.to_dict())
         else:
             trans = None
 
-    # block
-    prev = chain.last_block()
-    block = None
+    # if args.mining:
+    #     # miner
+    #     miner = Miner()
 
-    if prev is not None:
-        h_diff = prev.h_diff + (1 if chain.blocks_count() % 10000 == 0 else 0)
-        block = Block(h_diff, prev.hash().hexdigest(), user.pub)
-    else:
-        block = Block(14, None, user.pub)
+    #     # block
+    #     prev = chain.last_block()
+    #     block = None
 
-    if trans is not None:
-        block.add_trans(trans)
-        net.send_trans(trans)
+    #     if prev is not None:
+    #         h_diff = prev.h_diff + (1 if chain.blocks_count() % 10000 == 0 else 0)
+    #         block = Block(h_diff, prev.hash().hexdigest(), user.pub)
+    #     else:
+    #         block = Block(14, None, user.pub)
 
-    net.server.serve_forever()
+    #     if trans is not None:
+    #         block.add_trans(trans)
 
-    # mining
-    # miner.set_block(block)
-    # miner.work()
+    #     mining
+    #     miner.set_block(block)
+    #     miner.work()
 
-    # chain.add_block(block)
-    # net.send_block(block)
+    #     chain.add_block(block)
+    #     net.send({'block': block.to_dict()})
 
-    # print(f'solved: reward {block.reward()} picocoins.')
+    #     print(f'solved: reward {block.reward()} picocoins.')
 
-    # with open('blockchain.json', 'w') as f:
-    #     chain_json = json.dumps(chain.to_dict(), indent=4)
-    #     f.write(chain_json)
+    while True:
+        data = net.recv()
+
+        if data.get('block') is not None:
+            block = Block.from_dict(data['block'])
+            if block.work_check():
+                net.send({'block': block.to_dict()})
+
+            if chain.add_block(block):
+                with open('blockchain.json', 'w') as f:
+                    chain_json = json.dumps(chain.to_dict(), indent=4)
+                    f.write(chain_json)

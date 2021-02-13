@@ -1,7 +1,6 @@
 import json
 import base58
 import socket
-import socketserver
 import hashlib as hlib
 
 from queue import Queue
@@ -14,7 +13,7 @@ from ecdsa import SigningKey, VerifyingKey, SECP256k1
 
 
 h_diff_init = 14
-block_confirms_count = 1
+block_confirms_count = 3
 
 
 class DictHashable:
@@ -113,6 +112,7 @@ class User(DictHashable):
 
     @staticmethod
     def from_dict_without_hash(usr_dict, password):
+        User._decrypt_priv(usr_dict['priv'], password)
         return User(usr_dict['priv'], usr_dict['pub'])
 
     def sign(self, msg, password):
@@ -299,25 +299,38 @@ class Blockchain(DictHashable):
     def __init__(self, ver):
         self.coin = 'PicoCoin'
         self.ver = ver
-        self.blocks = {}
 
+        self.blocks = {}
         self.blocks_cache = {}
 
     def add_block(self, block):
+        h = block.hash().hexdigest()
+
         # reject block if pow fails or block is already in blockchain
-        if (not block.work_check()) or (self.blocks.get(block.hash().hexdigest()) is not None):
+        if not block.work_check():
+            print(f'Block {h[0:12]} rejected: pow fails.')
+            return
+
+        if self.blocks.get(h) is not None:
+            print(f'Block {h[0:12]} rejected: already in blockchain.')
             return
 
         if self.blocks_cache.get(block.prev) is None:
             self.blocks_cache[block.prev] = {}
 
-        if self.blocks_cache[block.prev].get(block) is None:
-            self.blocks_cache[block.prev][block] = 0
+        if self.blocks_cache[block.prev].get(h) is None:
+            self.blocks_cache[block.prev][h] = 0
 
-        self.blocks_cache[block.prev][block] += 1
+        self.blocks_cache[block.prev][h] += 1
+        print(f'Block {h[0:12]} confirms: {self.blocks_cache[block.prev][h]}')
 
-        if self.blocks_cache[block.prev][block] >= block_confirms_count:
-            self.blocks[block.hash().hexdigest()] = block
+        if self.blocks_cache[block.prev][h] >= block_confirms_count:
+            self.blocks[h] = block
+            del self.blocks_cache[block.prev][h]
+
+            print(f'Block {h[0:12]} accepted to blockchain.')
+            return True
+        return False
 
     def last_block(self):
         try:
@@ -349,28 +362,13 @@ class Blockchain(DictHashable):
         return chain
 
 
-class NetUDPServer(socketserver.ThreadingMixIn, socketserver.UDPServer):
-    address_family = socket.AF_INET6
-
-    def __init__(self, net, server_address, RequestHandlerClass, bind_and_activate=True):
-        self.net = net
-        super().__init__(server_address, RequestHandlerClass, bind_and_activate=bind_and_activate)
-
-
-class NetUDPHandler(socketserver.BaseRequestHandler):
-    def handle(self):
-        data, _ = self.request
-        data_dict = json.loads(data)
-        self.server.net.recv(data_dict)
-
-
 class Net(DictHashable):
     def __init__(self):
-        self.trans_queue = Queue()
-        self.block_queue = Queue()
-
         self.peers = []
-        self.server = NetUDPServer(self, ('::0', 10000), NetUDPHandler)
+
+        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        self.sock.bind(('::0', 10000))
+        self.sock.setblocking(False)
 
     def add_peer(self, ipv6, port):
         data = {
@@ -386,27 +384,13 @@ class Net(DictHashable):
             with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as sock:
                 sock.sendto(data_json, (peer['ipv6'], peer['port']))
 
-    def recv(self, data_dict):
-        if data_dict.get('trans') is not None:
-            trans = Transaction.from_dict(data_dict['trans'])
-            print(trans.to_dict())
-            self.trans_queue.put(trans)
-        elif data_dict.get('block') is not None:
-            block = Block.from_dict(data_dict['block'])
-            print(block.to_dict())
-            self.block_queue.put(block)
-
-    def send_trans(self, trans):
-        data = {
-            'trans': trans.to_dict()
-        }
-        self.send(data)
-
-    def send_block(self, block):
-        data = {
-            'block': block.to_dict()
-        }
-        self.send(data)
+    def recv(self):
+        try:
+            data_json, adr = self.sock.recvfrom(4194304)  # 4MB
+            data = json.loads(data_json)
+            return data
+        except BlockingIOError:
+            return {}
 
     def to_dict_without_hash(self):
         return {'peers': self.peers}
@@ -417,4 +401,4 @@ class Net(DictHashable):
         return net
 
     def __del__(self):
-        self.server.server_close()
+        self.sock.close()
