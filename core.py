@@ -311,6 +311,7 @@ class Blockchain(DictHashable):
     CHECK_BLOCK_PREV_NOT_FOUND = 'previous block not found'
     CHECK_BLOCK_POW_FAILED = 'proof of work was failed'
     CHECK_BLOCK_IN_CHAIN = 'already in blockchain'
+    CHECK_TRANSACTIONS_IN_CHAIN = 'transactions already in blockchain'
 
     def __init__(self, ver):
         self.coin = 'PicoCoin'
@@ -328,6 +329,10 @@ class Blockchain(DictHashable):
 
         if self.blocks.get(block.hash().hexdigest()) is not None:
             return Blockchain.CHECK_BLOCK_IN_CHAIN
+
+        for h, _ in block.trans.items():
+            if self.get_trans(h) is not None:
+                return Blockchain.CHECK_TRANSACTIONS_IN_CHAIN
 
         return Blockchain.CHECK_BLOCK_OK
 
@@ -361,6 +366,13 @@ class Blockchain(DictHashable):
 
     def get_block(self, block_hash):
         return self.blocks.get(block_hash)
+
+    def get_trans(self, trans_hash):
+        for _, block in self.blocks.items():
+            trans = block.trans.get(trans_hash)
+            if trans is not None:
+                return trans
+        return None
 
     def last_block(self):
         try:

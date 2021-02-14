@@ -159,7 +159,7 @@ class MiningServer(CoreServer):
         if self.block is None:
             self.update_block()
 
-        self.block.add_trans(trans)
+        self.trans_cache.append(trans)
 
     def update_block(self):
         prev = self.chain.last_block()
