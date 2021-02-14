@@ -2,6 +2,7 @@ import json
 import argparse
 import os.path
 from getpass import getpass
+from threading import Thread, Lock
 
 from miner import Miner
 from core import User, Net, Transaction, Invoice, Payment, Message, Block, Blockchain
@@ -103,6 +104,10 @@ class CLI:
 
 
 class CoreServer(CLI):
+    def __init__(self):
+        super().__init__()
+        self.mtx = Lock()
+
     def add_peer_hlr(self, peer_dict):
         ipv6 = peer_dict['ipv6']
         port = peer_dict['port']
@@ -117,7 +122,7 @@ class CoreServer(CLI):
     def add_block_hlr(self, block_dict):
         block = Block.from_dict(block_dict)
 
-        if net.check_block(block) and self.chain.get_block(block.hash().hexdigest()) is None:
+        if self.chain.check_block(block) is Blockchain.CHECK_BLOCK_OK:
             self.net.send({'block': block.to_dict()})
 
             if self.chain.add_block(block):
@@ -136,8 +141,9 @@ class CoreServer(CLI):
 
     def serve_forever(self):
         while True:
-            data = self.net.recv()
-            self.serve_dispatch(data)
+            with self.mtx:
+                data = self.net.recv()
+                self.serve_dispatch(data)
 
 
 class MiningServer(CoreServer):
@@ -145,6 +151,7 @@ class MiningServer(CoreServer):
         super().__init__()
         self.block = None
         self.miner = Miner()
+        self.trans_cache = []
 
     def make_trans(self, trans):
         super().make_trans(trans)
@@ -169,8 +176,8 @@ class MiningServer(CoreServer):
         if self.block is None:
             self.update_block()
 
-        self.block.add_trans(trans)
-
+        print(f'Transaction {trans.hash().hexdigest()[0:12]} accepted.')
+        self.trans_cache.append(trans)
 
     def serve_dispatch(self, data):
         super().serve_dispatch(data)
@@ -180,18 +187,26 @@ class MiningServer(CoreServer):
             self.add_trans_hlr(data['trans'])
 
     def serve_mining(self):
-        self.update_block()
+        while True:
+            self.update_block()
 
-        # mining
-        self.miner.set_block(self.block)
-        self.miner.work()
-        print(f'Block {self.block.hash().hexdigest()[0:12]} solved: reward {self.block.reward()} picocoins.')
+            with self.mtx:
+                for trans in self.trans_cache:
+                    self.block.add_trans(trans)
 
-        self.chain.add_block(self.block)
-        self.net.send({'block': self.block.to_dict()})
+            # mining
+            self.miner.set_block(self.block)
+            self.miner.work()
+            print(f'Block {self.block.hash().hexdigest()[0:12]} solved: reward {self.block.reward()} picocoins.')
+
+            with self.mtx:
+                self.chain.add_block(self.block)
+                self.net.send({'block': self.block.to_dict()})
 
     def serve_forever(self):
-        # self.serve_mining()
+        t = Thread(target=self.serve_mining)
+
+        t.start()
         super().serve_forever()
 
 
