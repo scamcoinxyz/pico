@@ -15,17 +15,24 @@ class CLI:
         self.chain = None
 
     @staticmethod
+    def _dict_to_disk(obj, obj_path):
+        with open(obj_path, 'w') as f:
+            obj_json = json.dumps(obj.to_dict(), indent=4)
+            f.write(obj_json)
+
+    @staticmethod
+    def _dict_from_disk(obj_path):
+        with open(obj_path, 'r') as f:
+            return json.loads(f.read())
+
+    @staticmethod
     def _init_ser_obj(obj_path, obj_reader, obj_maker):
         obj = None
         if os.path.exists(obj_path):
-            with open(obj_path, 'r') as f:
-                obj_dict = json.loads(f.read())
-                obj = obj_reader(obj_dict)
+            obj = obj_reader(CLI._dict_from_disk(obj_path))
         else:
             obj = obj_maker()
-            with open(obj_path, 'w') as f:
-                obj_json = json.dumps(obj.to_dict(), indent=4)
-                f.write(obj_json)
+            CLI._dict_to_disk(obj, obj_path)
         return obj
 
     def net_init(self, peers_path):
@@ -97,11 +104,7 @@ class CLI:
     def update_self_peer(self):
         self.net.update_peer(self.net.ipv6, 10000)
         self.net.send({'peer': {'ipv6': self.net.ipv6, 'port': 10000}})
-
-        with open('peers.json', 'w') as f:
-            net_json = json.dumps(self.net.to_dict(), indent=4)
-            f.write(net_json)
-
+        self._dict_to_disk(self.net, 'peers.json')
 
 class CoreServer(CLI):
     def __init__(self):
@@ -114,10 +117,7 @@ class CoreServer(CLI):
 
         if self.net.update_peer(ipv6, port):
             print(f"Peer {ipv6} {port} added.")
-
-            with open('peers.json', 'w') as f:
-                net_json = json.dumps(self.net.to_dict(), indent=4)
-                f.write(net_json)
+            self._dict_to_disk(self.net, 'peers.json')
 
     def add_block_hlr(self, block_dict):
         block = Block.from_dict(block_dict)
@@ -126,9 +126,7 @@ class CoreServer(CLI):
             self.net.send({'block': block.to_dict()})
 
             if self.chain.add_block(block):
-                with open('blockchain.json', 'w') as f:
-                    chain_json = json.dumps(self.chain.to_dict(), indent=4)
-                    f.write(chain_json)
+                self._dict_to_disk(self.chain, 'blockchain.json')
 
     def serve_dispatch(self, data):
         # add peer
@@ -193,6 +191,7 @@ class MiningServer(CoreServer):
             with self.mtx:
                 for trans in self.trans_cache:
                     self.block.add_trans(trans)
+                self.trans_cache.clear()
 
             # mining
             self.miner.set_block(self.block)
@@ -200,7 +199,8 @@ class MiningServer(CoreServer):
             print(f'Block {self.block.hash().hexdigest()[0:12]} solved: reward {self.block.reward()} picocoins.')
 
             with self.mtx:
-                self.chain.add_block(self.block)
+                if self.chain.add_block(self.block):
+                    self._dict_to_disk(self.chain, 'blockchain.json')
                 self.net.send({'block': self.block.to_dict()})
 
     def serve_forever(self):
