@@ -5,7 +5,7 @@ from getpass import getpass
 from threading import Thread, Lock
 
 from miner import Miner
-from core import User, Net, Transaction, Invoice, Payment, Message, Block, Blockchain
+from core import User, Net, Transaction, Invoice, Payment, Message, Reward, Block, Blockchain, h_diff_init
 
 
 class CLI:
@@ -126,6 +126,10 @@ class CoreServer(CLI):
             self.net.send({'block': block.to_dict()})
 
             if self.chain.add_block(block):
+                reward_act = Reward(block.reward(), block.hash().hexdigest())
+                reward_trans = Transaction(None, block.pow.solver, reward_act)
+
+                self.net.send({'trans': reward_trans.to_dict()})
                 self._dict_to_disk(self.chain, 'blockchain.json')
 
     def serve_dispatch(self, data):
@@ -167,7 +171,7 @@ class MiningServer(CoreServer):
             h_diff = prev.h_diff + (1 if self.chain.blocks_count() % 10000 == 0 else 0)
             self.block = Block(h_diff, prev.hash().hexdigest(), self.usr.pub)
         else:
-            self.block = Block(14, None, self.usr.pub)
+            self.block = Block(h_diff_init, None, self.usr.pub)
 
     def add_trans_hlr(self, trans_dict):
         trans = Transaction.from_dict(trans_dict)

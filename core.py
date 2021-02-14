@@ -42,7 +42,7 @@ class DictHashable:
         return d
 
     def hash(self):
-        self_json = json.dumps(self.to_dict_without_hash()).encode('utf-8')
+        self_json = json.dumps(self.to_dict_without_hash()).encode()
         return hlib.sha3_256(self_json)
 
 
@@ -172,6 +172,19 @@ class Message:
         return Message(msg_dict['msg'])
 
 
+class Reward:
+    def __init__(self, amount, block_hash):
+        self.amount = amount
+        self.block_hash = block_hash
+
+    def to_dict(self):
+        return {'rew': self.amount, 'blk': self.block_hash}
+
+    @staticmethod
+    def from_dict(rew_dict):
+        return Reward(float(rew_dict['rew']), rew_dict['blk'])
+
+
 class Transaction(DictSignable):
     def __init__(self, from_adr, to_adr, act):
         self.time = dt.utcnow()
@@ -197,13 +210,16 @@ class Transaction(DictSignable):
         act = {
             'ivc': Invoice,
             'pay': Payment,
-            'msg': Message
+            'msg': Message,
+            'rew': Reward
         }[act_str].from_dict(trans_dict['act'])
 
         trans = Transaction(trans_dict['from'], trans_dict['to'], act)
         trans.time = trans_dict['time']
         trans._sign = trans_dict['sign']
 
+        if trans.from_adr is not None:
+            trans.verify()
         return trans
 
 
@@ -226,7 +242,7 @@ class ProofOfWork:
             'solver': self.solver,
             'work': {n: f for n, f in list(self.work.items())[0:i]}
         }
-        blk = json.dumps(data).encode('utf-8')
+        blk = json.dumps(data).encode()
 
         h = hlib.sha3_256(blk).digest()
         num_b = h[0:self.block.h_diff]
@@ -256,10 +272,13 @@ class Block(DictHashable):
         self.prev = prev_block_hash
         self.time = dt.utcnow()
         self.h_diff = h_diff
-        self.v_diff = max(1, 2 ** (13 - 3 * h_diff // 8))
+        self.v_diff = self.get_v_diff()
         self.trans = {}
 
         self.pow = ProofOfWork(self, solver)
+
+    def get_v_diff(self):
+        return max(1, 2 ** (13 - 3 * self.h_diff // 8))
 
     def add_trans(self, trans):
         self.trans[trans.hash().hexdigest()] = trans
@@ -311,11 +330,12 @@ class Blockchain(DictHashable):
     CHECK_BLOCK_POW_FAILED = 'proof of work was failed'
     CHECK_BLOCK_IN_CHAIN = 'already in blockchain'
     CHECK_BLOCK_TRANS_IN_CHAIN = 'transactions already in blockchain'
+    CHECK_BLOCK_INVALID_DIFF = 'invalid block difficulty'
 
     CHECK_TRANS_OK = None
-    CHECK_TRANS_SIGN = 'transaction digital signature was failed'
     CHECK_TRANS_IN_CHAIN = 'transaction already in blockchain'
     CHECK_TRANS_INSUFF_COINS = 'insufficient coins'
+    CHECK_TRANS_REWARD_NOT_FOUND = 'reward block not found'
 
     def __init__(self, ver):
         self.coin = 'PicoCoin'
@@ -325,12 +345,6 @@ class Blockchain(DictHashable):
         self.blocks_cache = {}
 
     def check_trans(self, trans):
-        # check digital signature
-        try:
-            trans.verify()
-        except:
-            return Blockchain.CHECK_TRANS_SIGN
-
         # check transaction in blockchain
         if self.get_trans(trans.hash().hexdigest()) is not None:
             return Blockchain.CHECK_TRANS_IN_CHAIN
@@ -339,12 +353,25 @@ class Blockchain(DictHashable):
         if isinstance(trans.act, Payment) and self.get_bal(trans.from_adr) < trans.act.amount:
             return Blockchain.CHECK_TRANS_INSUFF_COINS
 
+        # check reward
+        if isinstance(trans.act, Reward):
+            block = self.get_block(trans.act.block_hash)
+            if (block is None) or (block.pow.solver != trans.to_adr):
+                return Blockchain.CHECK_TRANS_REWARD_NOT_FOUND
+
         return Blockchain.CHECK_TRANS_OK
 
     def check_block(self, block):
         # check previous block
-        if (block.prev is not None) and (self.get_block(block.prev) is None):
-            return Blockchain.CHECK_BLOCK_PREV_NOT_FOUND
+        prev = self.get_block(block.prev)
+        if block.prev is not None:
+            if prev is None:
+                return Blockchain.CHECK_BLOCK_PREV_NOT_FOUND
+
+            # check block diff
+            h_diff = prev.h_diff + (1 if self.blocks_count() % 10000 == 0 else 0)
+            if block.h_diff != h_diff or block.v_diff != block.get_v_diff():
+                return Blockchain.CHECK_BLOCK_INVALID_DIFF
 
         # check pow
         if not block.work_check():
@@ -419,6 +446,9 @@ class Blockchain(DictHashable):
                         bal += trans.act.amount
                     elif trans.from_adr == usr_pub:
                         bal -= trans.act.amount
+                elif isinstance(trans.act, Reward):
+                    if trans.to_adr == usr_pub:
+                        bal += trans.act.amount
         return bal
 
     def last_block(self):
