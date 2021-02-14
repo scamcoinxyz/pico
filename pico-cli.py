@@ -7,35 +7,161 @@ from miner import Miner
 from core import User, Net, Transaction, Invoice, Payment, Message, Block, Blockchain
 
 
-def get_pass(prompt='Password: '):
-    return getpass(prompt)
+class CoreServer:
+    def __init__(self):
+        self.net = None
+        self.usr = None
+        self.chain = None
+
+    @staticmethod
+    def _init_ser_obj(obj_path, obj_reader, obj_maker):
+        obj = None
+        if os.path.exists(obj_path):
+            with open(obj_path, 'r') as f:
+                obj_dict = json.loads(f.read())
+                obj = obj_reader(obj_dict)
+        else:
+            obj = obj_maker()
+            with open(obj_path, 'w') as f:
+                obj_json = json.dumps(obj.to_dict(), indent=4)
+                f.write(obj_json)
+        return obj
+
+    def net_init(self, peers_path):
+        def maker():
+            net = Net()
+            net.add_peer('2002:c257:6f39::1', 10000)
+            net.add_peer('2002:c257:65d4::1', 10000)
+            return net
+
+        reader = lambda d: Net.from_dict(d)
+        self.net = CoreServer._init_ser_obj(peers_path, reader, maker)
+        self.update_self_peer()
+
+    def usr_init(self, usr_path):
+        reader = lambda d: CoreServer.usr_login(d)
+        maker = CoreServer.usr_reg
+        self.usr = CoreServer._init_ser_obj(usr_path, reader, maker)
+
+    def chain_init(self, chain_path):
+        reader = lambda d: Blockchain.from_dict(d)
+        maker = lambda: Blockchain('0.1') # FIXME: fetch blockchain from another node
+        self.chain = CoreServer._init_ser_obj(chain_path, reader, maker)
+
+    @staticmethod
+    def usr_login(usr_dict):
+        while True:
+            try:
+                passwd = getpass('Password: ')
+                return User.from_dict(usr_dict, passwd)
+            except KeyboardInterrupt:
+                exit()
+            except:
+                print('Invalid password!')
+
+    @staticmethod
+    def usr_reg():
+        print('No user presented, register new one.')
+
+        while True:
+            try:
+                passwd0 = getpass('Password: ')
+                passwd1 = getpass('Repeat password:')
+
+                if passwd0 == passwd1:
+                    return User.create(passwd0)
+
+                print('Passwords mismatch, please, try again.')
+            except KeyboardInterrupt:
+                exit()
+
+    def make_trans(self, trans):
+        ans = input('Do u want to make a transaction? [y/n]: ')
+        if ans in ('y', 'Y'):
+            trans.sign(self.usr, getpass('Password: '))
+            self.net.send({'trans': trans.to_dict()})
+            print(trans.to_dict())
+
+    def add_peer_hlr(self, peer_dict):
+        ipv6 = peer_dict['ipv6']
+        port = peer_dict['port']
+
+        if self.net.update_peer(ipv6, port):
+            print(f"Peer {ipv6} {port} added.")
+
+        with open('peers.json', 'w') as f:
+            net_json = json.dumps(self.net.to_dict(), indent=4)
+            f.write(net_json)
+
+    def add_block_hlr(self, block_dict):
+        block = Block.from_dict(block_dict)
+
+        if block.work_check() and self.chain.get_block(block.hash().hexdigest()) is None:
+            self.net.send({'block': block.to_dict()})
+
+        if self.chain.add_block(block):
+            with open('blockchain.json', 'w') as f:
+                chain_json = json.dumps(self.chain.to_dict(), indent=4)
+                f.write(chain_json)
+
+    def serve_forever(self):
+        while True:
+            data = self.net.recv()
+
+            # add peer
+            if data.get('peer') is not None:
+                self.add_peer_hlr(data['peer'])
+
+            # add block
+            if data.get('block') is not None:
+                self.add_block_hlr(data['block'])
+
+    def update_self_peer(self):
+        self.net.update_peer(self.net.ipv6, 10000)
+        self.net.send({'peer': {'ipv6': self.net.ipv6, 'port': 10000}})
+
+        with open('peers.json', 'w') as f:
+            net_json = json.dumps(self.net.to_dict(), indent=4)
+            f.write(net_json)
 
 
-def login(usr_dict):
-    while True:
-        try:
-            passwd = get_pass()
-            return User.from_dict(usr_dict, passwd)
-        except KeyboardInterrupt:
-            exit()
-        except:
-            print('Invalid password!')
+class MiningServer(CoreServer):
+    def __init__(self):
+        super().__init__()
+        self.block = None
+        self.miner = Miner()
 
+    def make_trans(self, trans):
+        super().make_trans(trans)
 
-def register():
-    print('No user presented, register new one.')
+        if self.block is None:
+            self.update_block()
 
-    while True:
-        try:
-            passwd0 = get_pass()
-            passwd1 = get_pass('Repeat password:')
+        self.block.add_trans(trans)
 
-            if passwd0 == passwd1:
-                return User.create(passwd0)
+    def update_block(self):
+        prev = self.chain.last_block()
 
-            print('Passwords mismatch, please, try again.')
-        except KeyboardInterrupt:
-            exit()
+        if prev is not None:
+            h_diff = prev.h_diff + (1 if self.chain.blocks_count() % 10000 == 0 else 0)
+            self.block = Block(h_diff, prev.hash().hexdigest(), self.usr.pub)
+        else:
+            self.block = Block(14, None, self.usr.pub)
+
+    def serve_mining(self):
+        self.update_block()
+
+        # mining
+        self.miner.set_block(self.block)
+        self.miner.work()
+        print(f'Block {self.block.hash().hexdigest()[0:12]} solved: reward {self.block.reward()} picocoins.')
+
+        self.chain.add_block(self.block)
+        self.net.send({'block': self.block.to_dict()})
+
+    def serve_forever(self):
+        self.serve_mining()
+        super().serve_forever()
 
 
 if __name__ == '__main__':
@@ -49,59 +175,14 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    # peers
-    net = None
+    # init core server
+    serv = CoreServer() if not args.mining else MiningServer()
 
-    if os.path.exists(args.peers):
-        with open(args.peers, 'r') as f:
-            net_dict = json.loads(f.read())
-            net = Net.from_dict(net_dict)
-    else:
-        net = Net()
-        net.add_peer('2002:c257:6f39::1', 10000)
-        net.add_peer('2002:c257:65d4::1', 10000)
+    serv.net_init(args.peers)
+    serv.usr_init(args.usr)
+    serv.chain_init(args.chain)
 
-        with open('peers.json', 'w') as f:
-            net_json = json.dumps(net.to_dict(), indent=4)
-            f.write(net_json)
-
-    # update peers
-    net.update_peer(net.ipv6, 10000)
-    net.send({'peer': {'ipv6': net.ipv6, 'port': 10000}})
-
-    with open('peers.json', 'w') as f:
-            net_json = json.dumps(net.to_dict(), indent=4)
-            f.write(net_json)
-
-    # user
-    user = None
-
-    if os.path.exists(args.usr):
-        with open(args.usr, 'r') as f:
-            usr_dict = json.loads(f.read())
-            user = login(usr_dict)
-    else:
-        user = register()
-        with open(args.usr, 'w') as f:
-            usr_json = json.dumps(user.to_dict(), indent=4)
-            f.write(usr_json)
-
-    # blockchain
-    chain = None
-
-    if os.path.exists(args.chain):
-        with open(args.chain, 'r') as f:
-            chain_dict = json.loads(f.read())
-            chain = Blockchain.from_dict(chain_dict)
-    else:
-        # FIXME: fetch blockchain from another node
-        chain = Blockchain('0.1')
-        with open('blockchain.json', 'w') as f:
-            chain_json = json.dumps(chain.to_dict(), indent=4)
-            f.write(chain_json)
-
-    # transactions
-    trans = None
+    # make transaction
     if args.trans is not None:
         to = args.trans[0]
         act_args = args.trans[2]
@@ -112,64 +193,8 @@ if __name__ == '__main__':
             'msg': lambda: Message(act_args)
         }[args.trans[1]]()
 
-        trans = Transaction(user.pub, to, act)
+        trans = Transaction(serv.usr.pub, to, act)
+        serv.make_trans(trans)
 
-        ans = input('Do u want to make a transaction? [y/n]: ')
-        if ans in ('y', 'Y'):
-            trans.sign(user, get_pass())
-            net.send({'trans': trans.to_dict()})
-            print(trans.to_dict())
-        else:
-            trans = None
-
-    if args.mining:
-        # miner
-        miner = Miner()
-
-        # block
-        prev = chain.last_block()
-        block = None
-
-        if prev is not None:
-            h_diff = prev.h_diff + (1 if chain.blocks_count() % 10000 == 0 else 0)
-            block = Block(h_diff, prev.hash().hexdigest(), user.pub)
-        else:
-            block = Block(14, None, user.pub)
-
-        if trans is not None:
-            block.add_trans(trans)
-
-        # mining
-        miner.set_block(block)
-        miner.work()
-        print(f'Block {block.hash().hexdigest()[0:12]} solved: reward {block.reward()} picocoins.')
-
-        chain.add_block(block)
-        net.send({'block': block.to_dict()})
-
-    while True:
-        data = net.recv()
-
-        # add peer
-        if data.get('peer') is not None:
-            ipv6 = data['peer']['ipv6']
-            port = data['peer']['port']
-
-            if net.update_peer(ipv6, port):
-                print(f"Peer {ipv6} {port} added.")
-
-            with open('peers.json', 'w') as f:
-                net_json = json.dumps(net.to_dict(), indent=4)
-                f.write(net_json)
-
-        # add block
-        if data.get('block') is not None:
-            block = Block.from_dict(data['block'])
-
-            if block.work_check() and chain.get_block(block.hash().hexdigest()) is None:
-                net.send({'block': block.to_dict()})
-
-            if chain.add_block(block):
-                with open('blockchain.json', 'w') as f:
-                    chain_json = json.dumps(chain.to_dict(), indent=4)
-                    f.write(chain_json)
+    # serve
+    serv.serve_forever()
