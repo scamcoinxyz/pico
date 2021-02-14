@@ -203,7 +203,6 @@ class Transaction(DictSignable):
         trans = Transaction(trans_dict['from'], trans_dict['to'], act)
         trans.time = trans_dict['time']
         trans._sign = trans_dict['sign']
-        trans.verify()
 
         return trans
 
@@ -311,7 +310,12 @@ class Blockchain(DictHashable):
     CHECK_BLOCK_PREV_NOT_FOUND = 'previous block not found'
     CHECK_BLOCK_POW_FAILED = 'proof of work was failed'
     CHECK_BLOCK_IN_CHAIN = 'already in blockchain'
-    CHECK_TRANSACTIONS_IN_CHAIN = 'transactions already in blockchain'
+    CHECK_BLOCK_TRANS_IN_CHAIN = 'transactions already in blockchain'
+
+    CHECK_TRANS_OK = None
+    CHECK_TRANS_SIGN = 'transaction digital signature was failed'
+    CHECK_TRANS_IN_CHAIN = 'transaction already in blockchain'
+    CHECK_TRANS_INSUFF_COINS = 'insufficient coins'
 
     def __init__(self, ver):
         self.coin = 'PicoCoin'
@@ -320,21 +324,53 @@ class Blockchain(DictHashable):
         self.blocks = {}
         self.blocks_cache = {}
 
+    def check_trans(self, trans):
+        # check digital signature
+        try:
+            trans.verify()
+        except:
+            return Blockchain.CHECK_TRANS_SIGN
+
+        # check transaction in blockchain
+        if self.get_trans(trans.hash().hexdigest()) is not None:
+            return Blockchain.CHECK_TRANS_IN_CHAIN
+
+        # check billing balance
+        if isinstance(trans.act, Payment) and self.get_bal(trans.from_adr) < trans.act.amount:
+            return Blockchain.CHECK_TRANS_INSUFF_COINS
+
+        return Blockchain.CHECK_TRANS_OK
+
     def check_block(self, block):
+        # check previous block
         if (block.prev is not None) and (self.get_block(block.prev) is None):
             return Blockchain.CHECK_BLOCK_PREV_NOT_FOUND
 
+        # check pow
         if not block.work_check():
             return Blockchain.CHECK_BLOCK_POW_FAILED
 
+        # check if block is in blockchain
         if self.blocks.get(block.hash().hexdigest()) is not None:
             return Blockchain.CHECK_BLOCK_IN_CHAIN
 
+        # check transactions in blockchain
         for h, _ in block.trans.items():
             if self.get_trans(h) is not None:
-                return Blockchain.CHECK_TRANSACTIONS_IN_CHAIN
+                return Blockchain.CHECK_BLOCK_TRANS_IN_CHAIN
 
         return Blockchain.CHECK_BLOCK_OK
+
+    def add_trans(self, block, trans):
+        h = trans.hash().hexdigest()
+
+        reason = self.check_trans(trans)
+        if reason is not Blockchain.CHECK_TRANS_OK:
+            print(f'Transaction {h[0:12]} rejected: {reason}.')
+            return
+
+        print(f'Transaction {h[0:12]} accepted.')
+        return True
 
     def add_block(self, block):
         h = block.hash().hexdigest()
@@ -343,7 +379,7 @@ class Blockchain(DictHashable):
         reason = self.check_block(block)
         if reason is not Blockchain.CHECK_BLOCK_OK:
             print(f'Block {h[0:12]} rejected: {reason}.')
-            return
+            return False
 
         # confirm
         if self.blocks_cache.get(block.prev) is None:
@@ -373,6 +409,17 @@ class Blockchain(DictHashable):
             if trans is not None:
                 return trans
         return None
+
+    def get_bal(self, usr_pub):
+        bal = 0
+        for _, block in self.blocks.items():
+            for _, trans in block.trans.items():
+                if isinstance(trans.act, Payment):
+                    if trans.to_adr == usr_pub:
+                        bal += trans.act.amount
+                    elif trans.from_adr == usr_pub:
+                        bal -= trans.act.amount
+        return bal
 
     def last_block(self):
         try:

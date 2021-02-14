@@ -103,22 +103,14 @@ class CLI:
 
     def update_self_peer(self):
         self.net.update_peer(self.net.ipv6, 10000)
-        # self.net.send({'peer': {'ipv6': self.net.ipv6, 'port': 10000}})
         self.net.send(self.net.to_dict())
         self._dict_to_disk(self.net, 'peers.json')
+
 
 class CoreServer(CLI):
     def __init__(self):
         super().__init__()
         self.mtx = Lock()
-
-    # def add_peer_hlr(self, peer_dict):
-    #     ipv6 = peer_dict['ipv6']
-    #     port = peer_dict['port']
-
-    #     if self.net.update_peer(ipv6, port):
-    #         print(f'Peer {ipv6} {port} added.')
-    #         self._dict_to_disk(self.net, 'peers.json')
 
     def update_peers_hlr(self, peers_dict):
         if self.net.update_peers(peers_dict):
@@ -138,7 +130,6 @@ class CoreServer(CLI):
 
     def serve_dispatch(self, data):
         hlr_map = {
-            # 'peer': self.add_peer_hlr,
             'peers': self.update_peers_hlr,
             'block': self.add_block_hlr
         }
@@ -184,7 +175,6 @@ class MiningServer(CoreServer):
         if self.block is None:
             self.update_block()
 
-        print(f'Transaction {trans.hash().hexdigest()[0:12]} accepted.')
         self.trans_cache.append(trans)
 
     def serve_dispatch(self, data):
@@ -200,7 +190,7 @@ class MiningServer(CoreServer):
 
             with self.mtx:
                 for trans in self.trans_cache:
-                    self.block.add_trans(trans)
+                    self.chain.add_trans(self.block, trans)
                 self.trans_cache.clear()
 
             # mining
@@ -228,6 +218,7 @@ if __name__ == '__main__':
     parser.add_argument('--mining', action='store_true', help='work as mining server')
     parser.add_argument('--adr',  type=str, default='127.0.0.1', help='server listen address (default: "127.0.0.1")')
     parser.add_argument('--trans', nargs=3, metavar=('to', 'act', 'args'), help='make a transaction')
+    parser.add_argument('--bal', action='store_true', help='get user balance')
 
     args = parser.parse_args()
 
@@ -237,6 +228,12 @@ if __name__ == '__main__':
     serv.net_init(args.peers)
     serv.usr_init(args.usr)
     serv.chain_init(args.chain)
+
+    # get balance
+    if args.bal:
+        print(f'Balance: {serv.chain.get_bal(serv.usr.pub)} picocoins.')
+        if not args.mining:
+            exit()
 
     # make transaction
     if args.trans is not None:
@@ -251,6 +248,9 @@ if __name__ == '__main__':
 
         trans = Transaction(serv.usr.pub, to, act)
         serv.make_trans(trans)
+
+        if not args.mining:
+            exit()
 
     # serve
     serv.serve_forever()
