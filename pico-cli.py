@@ -49,36 +49,47 @@ class CoreServer:
         self.chain = CoreServer._init_ser_obj(chain_path, reader, maker)
 
     @staticmethod
-    def usr_login(usr_dict):
+    def act_with_passwd(act):
         while True:
             try:
                 passwd = getpass('Password: ')
-                return User.from_dict(usr_dict, passwd)
+                return act(passwd)
             except KeyboardInterrupt:
                 exit()
             except:
                 print('Invalid password!')
 
     @staticmethod
-    def usr_reg():
-        print('No user presented, register new one.')
-
+    def gen_passwd():
         while True:
             try:
                 passwd0 = getpass('Password: ')
                 passwd1 = getpass('Repeat password:')
 
                 if passwd0 == passwd1:
-                    return User.create(passwd0)
+                    return passwd0
 
                 print('Passwords mismatch, please, try again.')
             except KeyboardInterrupt:
                 exit()
 
+    def passwd(self):
+        return CoreServer.act_with_passwd(self.usr.check_passwd)
+
+    @staticmethod
+    def usr_login(usr_dict):
+        act = lambda passwd: User.from_dict(usr_dict, passwd)
+        return CoreServer.act_with_passwd(act)
+
+    @staticmethod
+    def usr_reg():
+        print('No user presented, register new one.')
+        return User.create(CoreServer.gen_passwd())
+
     def make_trans(self, trans):
         ans = input('Do u want to make a transaction? [y/n]: ')
         if ans in ('y', 'Y'):
-            trans.sign(self.usr, getpass('Password: '))
+            trans.sign(self.usr, self.passwd())
             self.net.send({'trans': trans.to_dict()})
             print(trans.to_dict())
 
@@ -89,20 +100,20 @@ class CoreServer:
         if self.net.update_peer(ipv6, port):
             print(f"Peer {ipv6} {port} added.")
 
-        with open('peers.json', 'w') as f:
-            net_json = json.dumps(self.net.to_dict(), indent=4)
-            f.write(net_json)
+            with open('peers.json', 'w') as f:
+                net_json = json.dumps(self.net.to_dict(), indent=4)
+                f.write(net_json)
 
     def add_block_hlr(self, block_dict):
         block = Block.from_dict(block_dict)
 
-        if block.work_check() and self.chain.get_block(block.hash().hexdigest()) is None:
+        if net.check_block(block) and self.chain.get_block(block.hash().hexdigest()) is None:
             self.net.send({'block': block.to_dict()})
 
-        if self.chain.add_block(block):
-            with open('blockchain.json', 'w') as f:
-                chain_json = json.dumps(self.chain.to_dict(), indent=4)
-                f.write(chain_json)
+            if self.chain.add_block(block):
+                with open('blockchain.json', 'w') as f:
+                    chain_json = json.dumps(self.chain.to_dict(), indent=4)
+                    f.write(chain_json)
 
     def serve_forever(self):
         while True:

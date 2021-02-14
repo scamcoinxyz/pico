@@ -93,6 +93,10 @@ class User(DictHashable):
 
         return base58.b58encode(priv_raw).decode()
 
+    def check_passwd(self, password):
+        self._decrypt_priv(self.priv, password)
+        return password
+
     @staticmethod
     def create(password):
         priv_raw = SigningKey.generate(curve=SECP256k1)
@@ -303,6 +307,11 @@ class Block(DictHashable):
 
 
 class Blockchain(DictHashable):
+    CHECK_BLOCK_OK = None
+    CHECK_BLOCK_PREV_NOT_FOUND = 'previous block not found'
+    CHECK_BLOCK_POW_FAILED = 'proof of work was failed'
+    CHECK_BLOCK_IN_CHAIN = 'already in blockchain'
+
     def __init__(self, ver):
         self.coin = 'PicoCoin'
         self.ver = ver
@@ -310,18 +319,28 @@ class Blockchain(DictHashable):
         self.blocks = {}
         self.blocks_cache = {}
 
+    def check_block(self, block):
+        if (block.prev is not None) and (self.get_block(block.prev) is None):
+            return Blockchain.CHECK_BLOCK_PREV_NOT_FOUND
+
+        if not block.work_check():
+            return Blockchain.CHECK_BLOCK_POW_FAILED
+
+        if self.blocks.get(block.hash().hexdigest()) is not None:
+            return Blockchain.CHECK_BLOCK_IN_CHAIN
+
+        return Blockchain.CHECK_BLOCK_OK
+
     def add_block(self, block):
         h = block.hash().hexdigest()
 
-        # reject block if pow fails or block is already in blockchain
-        if not block.work_check():
-            print(f'Block {h[0:12]} rejected: proof of work was failed.')
+        # reject block if check fails
+        reason = self.check_block(block)
+        if reason is not Blockchain.CHECK_BLOCK_OK:
+            print(f'Block {h[0:12]} rejected: {reason}.')
             return
 
-        if self.blocks.get(h) is not None:
-            print(f'Block {h[0:12]} rejected: already in blockchain.')
-            return
-
+        # confirm
         if self.blocks_cache.get(block.prev) is None:
             self.blocks_cache[block.prev] = {}
 
@@ -331,6 +350,7 @@ class Blockchain(DictHashable):
         self.blocks_cache[block.prev][h] += 1
         print(f'Block {h[0:12]} confirms: {self.blocks_cache[block.prev][h]}')
 
+        # add block to blockchain if got required confirms
         if self.blocks_cache[block.prev][h] >= block_confirms_count:
             self.blocks[h] = block
             del self.blocks_cache[block.prev][h]
