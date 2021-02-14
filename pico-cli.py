@@ -7,7 +7,7 @@ from miner import Miner
 from core import User, Net, Transaction, Invoice, Payment, Message, Block, Blockchain
 
 
-class CoreServer:
+class CLI:
     def __init__(self):
         self.net = None
         self.usr = None
@@ -93,6 +93,16 @@ class CoreServer:
             self.net.send({'trans': trans.to_dict()})
             print(trans.to_dict())
 
+    def update_self_peer(self):
+        self.net.update_peer(self.net.ipv6, 10000)
+        self.net.send({'peer': {'ipv6': self.net.ipv6, 'port': 10000}})
+
+        with open('peers.json', 'w') as f:
+            net_json = json.dumps(self.net.to_dict(), indent=4)
+            f.write(net_json)
+
+
+class CoreServer(CLI):
     def add_peer_hlr(self, peer_dict):
         ipv6 = peer_dict['ipv6']
         port = peer_dict['port']
@@ -115,25 +125,19 @@ class CoreServer:
                     chain_json = json.dumps(self.chain.to_dict(), indent=4)
                     f.write(chain_json)
 
+    def serve_dispatch(self, data):
+        # add peer
+        if data.get('peer') is not None:
+            self.add_peer_hlr(data['peer'])
+
+        # add block
+        if data.get('block') is not None:
+            self.add_block_hlr(data['block'])
+
     def serve_forever(self):
         while True:
             data = self.net.recv()
-
-            # add peer
-            if data.get('peer') is not None:
-                self.add_peer_hlr(data['peer'])
-
-            # add block
-            if data.get('block') is not None:
-                self.add_block_hlr(data['block'])
-
-    def update_self_peer(self):
-        self.net.update_peer(self.net.ipv6, 10000)
-        self.net.send({'peer': {'ipv6': self.net.ipv6, 'port': 10000}})
-
-        with open('peers.json', 'w') as f:
-            net_json = json.dumps(self.net.to_dict(), indent=4)
-            f.write(net_json)
+            self.serve_dispatch(data)
 
 
 class MiningServer(CoreServer):
@@ -159,6 +163,22 @@ class MiningServer(CoreServer):
         else:
             self.block = Block(14, None, self.usr.pub)
 
+    def add_trans_hlr(self, trans_dict):
+        trans = Transaction.from_dict(trans_dict)
+
+        if self.block is None:
+            self.update_block()
+
+        self.block.add_trans(trans)
+
+
+    def serve_dispatch(self, data):
+        super().serve_dispatch(data)
+
+        # add trans
+        if data.get('trans') is not None:
+            self.add_trans_hlr(data['trans'])
+
     def serve_mining(self):
         self.update_block()
 
@@ -171,7 +191,7 @@ class MiningServer(CoreServer):
         self.net.send({'block': self.block.to_dict()})
 
     def serve_forever(self):
-        self.serve_mining()
+        # self.serve_mining()
         super().serve_forever()
 
 
