@@ -369,8 +369,7 @@ class Blockchain(DictHashable):
                 return Blockchain.CHECK_BLOCK_PREV_NOT_FOUND
 
             # check block diff
-            h_diff = prev.h_diff + (1 if self.blocks_count() % 10000 == 0 else 0)
-            if block.h_diff != h_diff or block.v_diff != block.get_v_diff():
+            if (block.h_diff != self.get_h_diff(prev)) or (block.h_diff < h_diff_init) or (block.v_diff != block.get_v_diff()):
                 return Blockchain.CHECK_BLOCK_INVALID_DIFF
 
         # check pow
@@ -430,6 +429,11 @@ class Blockchain(DictHashable):
     def get_block(self, block_hash):
         return self.blocks.get(block_hash)
 
+    def get_h_diff(self, block_prev):
+        if block_prev is None:
+            return h_diff_init
+        return block_prev.h_diff + (1 if self.blocks_count() % 10000 == 0 else 0)
+
     def get_trans(self, trans_hash):
         for _, block in self.blocks.items():
             trans = block.trans.get(trans_hash)
@@ -487,8 +491,9 @@ class Net(DictHashable):
 
         self._get_ipv6()
 
-        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
         self.sock.bind(('::0', 10000))
+        self.sock.listen(100)
         self.sock.setblocking(False)
 
     def add_peer(self, ipv6, port):
@@ -514,10 +519,9 @@ class Net(DictHashable):
 
     def _get_ipv6(self):
         # google dns
-        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
-        self.sock.connect(("2001:4860:4860::8888", 80))
-        self.ipv6 = self.sock.getsockname()[0]
-        self.sock.close()
+        with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as sock:
+            sock.connect(("2001:4860:4860::8888", 80))
+            self.ipv6 = sock.getsockname()[0]
 
     def send(self, data_dict):
         data_json = json.dumps(data_dict).encode()
@@ -527,14 +531,24 @@ class Net(DictHashable):
             if peer['ipv6'] == self.ipv6:
                 continue
  
-            with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as sock:
-                sock.sendto(data_comp, (peer['ipv6'], peer['port']))
+            with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as sock:
+                try:
+                    sock.settimeout(5)
+                    sock.connect((peer['ipv6'], peer['port']))
+                    sock.settimeout(None)
+                    sock.send(data_comp)
+                except ConnectionRefusedError:
+                    continue
+                except socket.timeout:
+                    continue
 
     def recv(self):
         try:
-            data_comp, adr = self.sock.recvfrom(4194304)  # 4MB
+            sock, adr = self.sock.accept()
+            data_comp = sock.recv(4194304)  # 4MB
             data_json = zlib.decompress(data_comp).decode()
             data = json.loads(data_json)
+            sock.close()
             return data
         except BlockingIOError:
             return {}

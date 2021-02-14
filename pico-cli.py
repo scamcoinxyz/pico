@@ -5,7 +5,7 @@ from getpass import getpass
 from threading import Thread, Lock
 
 from miner import Miner
-from core import User, Net, Transaction, Invoice, Payment, Message, Reward, Block, Blockchain, h_diff_init
+from core import User, Net, Transaction, Invoice, Payment, Message, Reward, Block, Blockchain
 
 
 class CLI:
@@ -166,12 +166,10 @@ class MiningServer(CoreServer):
 
     def update_block(self):
         prev = self.chain.last_block()
+        h_diff = self.chain.get_h_diff(prev)
+        prev_hash = prev.hash().hexdigest() if prev is not None else None
 
-        if prev is not None:
-            h_diff = prev.h_diff + (1 if self.chain.blocks_count() % 10000 == 0 else 0)
-            self.block = Block(h_diff, prev.hash().hexdigest(), self.usr.pub)
-        else:
-            self.block = Block(h_diff_init, None, self.usr.pub)
+        self.block = Block(h_diff, prev_hash, self.usr.pub)
 
     def add_trans_hlr(self, trans_dict):
         trans = Transaction.from_dict(trans_dict)
