@@ -32,6 +32,35 @@ Notes:
 [Pico](https://en.wikipedia.org/wiki/Pico-) is a unit prefix in the metric system denoting a factor of 1 trillionth (`10 ^ (-12)`).
 Coin name is consistent with its purpose - to work on small computing devices.
 
+### Usage
+1. Get current balance and exit:
+```bash
+python3 pico-cli.py --bal
+```
+
+2. Make a transaction and exit:
+```bash
+python3 pico-cli.py --trans <receiver pub key> <action> <args>
+```
+
+Actions:
+* Invoice: `ivc <amount>`
+* Payment: `pay <amount>`
+* Message: `msg <text>`
+
+3. Run core daemon:
+```bash
+python3 pico-cli.py
+```
+
+4. Run mining server:
+```bash
+python3 pico-cli.py --mining
+```
+
+Also you can combain those flags.
+
+
 ### How to install
 #### Linux
 

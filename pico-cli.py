@@ -144,8 +144,8 @@ class CoreServer(CLI):
 
     def serve_forever(self):
         while True:
+            data = self.net.recv()
             with self.mtx:
-                data = self.net.recv()
                 self.serve_dispatch(data)
 
 
@@ -202,6 +202,12 @@ class MiningServer(CoreServer):
 
             with self.mtx:
                 if self.chain.add_block(self.block):
+                    reward_act = Reward(self.block.reward(), self.block.hash().hexdigest())
+                    reward_trans = Transaction(None, self.block.pow.solver, reward_act)
+
+                    self.trans_cache.append(reward_trans)
+                    self.net.send({'trans': reward_trans.to_dict()})
+
                     self._dict_to_disk(self.chain, 'blockchain.json')
                 self.net.send({'block': self.block.to_dict()})
 
@@ -227,7 +233,6 @@ if __name__ == '__main__':
     # init core server
     serv = CoreServer() if not args.mining else MiningServer()
 
-    serv.net_init(args.peers)
     serv.usr_init(args.usr)
     serv.chain_init(args.chain)
 
@@ -236,6 +241,8 @@ if __name__ == '__main__':
         print(f'Balance: {serv.chain.get_bal(serv.usr.pub)} picocoins.')
         if not args.mining:
             exit()
+
+    serv.net_init(args.peers)
 
     # make transaction
     if args.trans is not None:

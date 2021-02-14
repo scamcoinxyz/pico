@@ -15,7 +15,7 @@ from ecdsa import SigningKey, VerifyingKey, SECP256k1
 
 
 h_diff_init = 14
-block_confirms_count = 3
+block_confirms_count = 6
 
 
 class DictHashable:
@@ -368,9 +368,9 @@ class Blockchain(DictHashable):
             if prev is None:
                 return Blockchain.CHECK_BLOCK_PREV_NOT_FOUND
 
-            # check block diff
-            if (block.h_diff != self.get_h_diff(prev)) or (block.h_diff < h_diff_init) or (block.v_diff != block.get_v_diff()):
-                return Blockchain.CHECK_BLOCK_INVALID_DIFF
+        # check block diff
+        if (block.h_diff != self.get_h_diff(prev)) or (block.h_diff < h_diff_init) or (block.v_diff != block.get_v_diff()):
+            return Blockchain.CHECK_BLOCK_INVALID_DIFF
 
         # check pow
         if not block.work_check():
@@ -395,6 +395,7 @@ class Blockchain(DictHashable):
             print(f'Transaction {h[0:12]} rejected: {reason}.')
             return
 
+        block.add_trans(trans)
         print(f'Transaction {h[0:12]} accepted.')
         return True
 
@@ -488,13 +489,8 @@ class Blockchain(DictHashable):
 class Net(DictHashable):
     def __init__(self):
         self.peers = []
-
         self._get_ipv6()
-
-        self.sock = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-        self.sock.bind(('::0', 10000))
-        self.sock.listen(100)
-        self.sock.setblocking(False)
+        self.sock = socket.create_server(('::0', 10000), family=socket.AF_INET6)
 
     def add_peer(self, ipv6, port):
         data = {
@@ -525,32 +521,32 @@ class Net(DictHashable):
 
     def send(self, data_dict):
         data_json = json.dumps(data_dict).encode()
-        data_comp = zlib.compress(data_json)
+        # data_comp = zlib.compress(data_json)
 
         for peer in self.peers:
             if peer['ipv6'] == self.ipv6:
                 continue
  
-            with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as sock:
-                try:
-                    sock.settimeout(5)
-                    sock.connect((peer['ipv6'], peer['port']))
-                    sock.settimeout(None)
-                    sock.send(data_comp)
-                except ConnectionRefusedError:
-                    continue
-                except socket.timeout:
-                    continue
+            try:
+                with socket.create_connection((peer['ipv6'], peer['port'])) as sock:
+                    sock.sendall(data_json)
+            except ConnectionRefusedError:
+                continue
+            except OSError:
+                continue
+            except TimeoutError:
+                continue
 
     def recv(self):
-        try:
-            sock, adr = self.sock.accept()
-            data_comp = sock.recv(4194304)  # 4MB
-            data_json = zlib.decompress(data_comp).decode()
-            data = json.loads(data_json)
-            sock.close()
+        sock, adr = self.sock.accept()
+        data_comp = sock.recv(8388608)  # 8MB
+        sock.close()
+
+        if data_comp:
+            # data_json = zlib.decompress(data_comp).decode()
+            data = json.loads(data_comp)
             return data
-        except BlockingIOError:
+        else:
             return {}
 
     def to_dict_without_hash(self):
