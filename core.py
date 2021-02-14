@@ -1,3 +1,4 @@
+import zlib
 import json
 import base58
 import socket
@@ -399,17 +400,19 @@ class Net(DictHashable):
 
     def send(self, data_dict):
         data_json = json.dumps(data_dict).encode()
+        data_comp = zlib.compress(data_json)
 
         for peer in self.peers:
             if peer['ipv6'] == self.ipv6:
                 continue
  
             with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as sock:
-                sock.sendto(data_json, (peer['ipv6'], peer['port']))
+                sock.sendto(data_comp, (peer['ipv6'], peer['port']))
 
     def recv(self):
         try:
-            data_json, adr = self.sock.recvfrom(4194304)  # 4MB
+            data_comp, adr = self.sock.recvfrom(4194304)  # 4MB
+            data_json = zlib.decompress(data_comp).decode()
             data = json.loads(data_json)
             return data
         except BlockingIOError:
