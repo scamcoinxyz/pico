@@ -7,6 +7,7 @@ import hashlib as hlib
 from queue import Queue
 from functools import reduce
 from abc import abstractmethod
+from sympy.ntheory import isprime
 from datetime import datetime as dt
 
 from Crypto.Cipher import AES
@@ -232,6 +233,11 @@ class ProofOfWork:
     def work_check_h(self, i):
         num = self.extract(i)
         factors = list(self.work.items())[i][1]
+
+        # check factors are primes
+        for v, p in factors.items():
+            if not isprime(int(v)):
+                return False
 
         return True if (num == self._primes_int(factors)) else False
 
