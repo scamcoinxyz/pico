@@ -103,7 +103,8 @@ class CLI:
 
     def update_self_peer(self):
         self.net.update_peer(self.net.ipv6, 10000)
-        self.net.send({'peer': {'ipv6': self.net.ipv6, 'port': 10000}})
+        # self.net.send({'peer': {'ipv6': self.net.ipv6, 'port': 10000}})
+        self.net.send(self.net.to_dict())
         self._dict_to_disk(self.net, 'peers.json')
 
 class CoreServer(CLI):
@@ -111,12 +112,19 @@ class CoreServer(CLI):
         super().__init__()
         self.mtx = Lock()
 
-    def add_peer_hlr(self, peer_dict):
-        ipv6 = peer_dict['ipv6']
-        port = peer_dict['port']
+    # def add_peer_hlr(self, peer_dict):
+    #     ipv6 = peer_dict['ipv6']
+    #     port = peer_dict['port']
 
-        if self.net.update_peer(ipv6, port):
-            print(f"Peer {ipv6} {port} added.")
+    #     if self.net.update_peer(ipv6, port):
+    #         print(f'Peer {ipv6} {port} added.')
+    #         self._dict_to_disk(self.net, 'peers.json')
+
+    def update_peers_hlr(self, peers_dict):
+        if self.net.update_peers(peers_dict):
+            print('Peers updated.')
+
+            self.net.send({'peers': peers_dict})
             self._dict_to_disk(self.net, 'peers.json')
 
     def add_block_hlr(self, block_dict):
@@ -129,13 +137,15 @@ class CoreServer(CLI):
                 self._dict_to_disk(self.chain, 'blockchain.json')
 
     def serve_dispatch(self, data):
-        # add peer
-        if data.get('peer') is not None:
-            self.add_peer_hlr(data['peer'])
+        hlr_map = {
+            # 'peer': self.add_peer_hlr,
+            'peers': self.update_peers_hlr,
+            'block': self.add_block_hlr
+        }
 
-        # add block
-        if data.get('block') is not None:
-            self.add_block_hlr(data['block'])
+        for key, hlr in hlr_map.items():
+            if data.get(key):
+                hlr(data[key])
 
     def serve_forever(self):
         while True:

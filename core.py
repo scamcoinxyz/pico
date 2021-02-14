@@ -429,6 +429,12 @@ class Net(DictHashable):
         self.add_peer(ipv6, port)
         return True
 
+    def update_peers(self, peers):
+        updated = False
+        for peer in peers:
+            updated = updated or self.update_peer(peer['ipv6'], peer['port'])
+        return updated
+
     def _get_ipv6(self):
         # google dns
         self.sock = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
