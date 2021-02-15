@@ -351,7 +351,7 @@ class Blockchain(DictHashable):
         self.blocks = {}
         self.blocks_cache = {}
 
-    def check_trans(self, trans):
+    def check_trans(self, trans, block):
         # check transaction in blockchain
         if self.get_trans(trans.hash().hexdigest()) is not None:
             return Blockchain.CHECK_TRANS_IN_CHAIN
@@ -362,8 +362,7 @@ class Blockchain(DictHashable):
 
         # check reward
         if isinstance(trans.act, Reward):
-            block = self.get_block(trans.act.block_hash)
-            if (block is None) or (block.pow.solver != trans.to_adr):
+            if (self.get_block(block.prev) is None) or (block.pow.solver != trans.to_adr):
                 return Blockchain.CHECK_TRANS_REWARD_NOT_FOUND
 
         return Blockchain.CHECK_TRANS_OK
@@ -402,7 +401,7 @@ class Blockchain(DictHashable):
     def add_trans(self, block, trans):
         h = trans.hash().hexdigest()
 
-        reason = self.check_trans(trans)
+        reason = self.check_trans(trans, block)
         if reason is not Blockchain.CHECK_TRANS_OK:
             print(f'Transaction {h[0:12]} rejected: {reason}.')
             return

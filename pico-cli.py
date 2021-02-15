@@ -126,10 +126,6 @@ class CoreServer(CLI):
             self.net.send({'block': block.to_dict()})
 
         if self.chain.add_block(block):
-            reward_act = Reward(block.reward(), block.hash().hexdigest())
-            reward_trans = Transaction(None, block.pow.solver, reward_act)
-
-            self.net.send({'trans': reward_trans.to_dict()})
             self._dict_to_disk(self.chain, 'blockchain.json')
 
     def serve_dispatch(self, data):
@@ -162,6 +158,7 @@ class MiningServer(CoreServer):
         if self.block is None:
             self.update_block()
 
+        print(f'Transaction {trans.hash().hexdigest()[0:12]} will be in next block.')
         self.trans_cache.append(trans)
 
     def update_block(self):
@@ -202,15 +199,18 @@ class MiningServer(CoreServer):
             print(f'Block {self.block.hash().hexdigest()[0:12]} solved: reward {self.block.reward()} picocoins.')
 
             with self.mtx:
-                if self.chain.add_block(self.block):
+                if self.chain.check_block(self.block) is Blockchain.CHECK_BLOCK_OK:
                     reward_act = Reward(self.block.reward(), self.block.hash().hexdigest())
                     reward_trans = Transaction(None, self.block.pow.solver, reward_act)
 
+                    print(f'Transaction {reward_trans.hash().hexdigest()[0:12]} will be in next block.')
                     self.trans_cache.append(reward_trans)
-                    self.net.send({'trans': reward_trans.to_dict()})
 
+                    self.net.send({'trans': reward_trans.to_dict()})
+                    self.net.send({'block': self.block.to_dict()})
+
+                if self.chain.add_block(self.block):
                     self._dict_to_disk(self.chain, 'blockchain.json')
-                self.net.send({'block': self.block.to_dict()})
 
     def serve_forever(self):
         t = Thread(target=self.serve_mining)
