@@ -540,7 +540,7 @@ class Net(DictHashable):
                 continue
  
             try:
-                with socket.create_connection((peer['ipv6'], peer['port'])) as sock:
+                with socket.create_connection((peer['ipv6'], peer['port']), timeout=5) as sock:
                     sock.sendall(data_comp)
             except Exception:
                 continue

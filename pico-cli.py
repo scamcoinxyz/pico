@@ -125,12 +125,12 @@ class CoreServer(CLI):
         if self.chain.check_block(block) is Blockchain.CHECK_BLOCK_OK:
             self.net.send({'block': block.to_dict()})
 
-            if self.chain.add_block(block):
-                reward_act = Reward(block.reward(), block.hash().hexdigest())
-                reward_trans = Transaction(None, block.pow.solver, reward_act)
+        if self.chain.add_block(block):
+            reward_act = Reward(block.reward(), block.hash().hexdigest())
+            reward_trans = Transaction(None, block.pow.solver, reward_act)
 
-                self.net.send({'trans': reward_trans.to_dict()})
-                self._dict_to_disk(self.chain, 'blockchain.json')
+            self.net.send({'trans': reward_trans.to_dict()})
+            self._dict_to_disk(self.chain, 'blockchain.json')
 
     def serve_dispatch(self, data):
         hlr_map = {
