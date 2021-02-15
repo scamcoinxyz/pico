@@ -335,7 +335,6 @@ class Blockchain(DictHashable):
     CHECK_BLOCK_PREV_NOT_FOUND = 'previous block not found'
     CHECK_BLOCK_POW_FAILED = 'proof of work was failed'
     CHECK_BLOCK_IN_CHAIN = 'already in blockchain'
-    CHECK_BLOCK_TRANS_IN_CHAIN = 'transactions already in blockchain'
     CHECK_BLOCK_INVALID_DIFF = 'invalid block difficulty'
     CHECK_BLOCK_ALREADY_SOLVED = 'already solved'
 
@@ -362,7 +361,7 @@ class Blockchain(DictHashable):
 
         # check reward
         if isinstance(trans.act, Reward):
-            if (self.get_block(block.prev) is None) or (block.pow.solver != trans.to_adr):
+            if ((block.prev is not None) and (self.get_block(block.prev) is None)) or (block.pow.solver != trans.to_adr):
                 return Blockchain.CHECK_TRANS_REWARD_NOT_FOUND
 
         return Blockchain.CHECK_TRANS_OK
@@ -373,11 +372,6 @@ class Blockchain(DictHashable):
         if block.prev is not None:
             if prev is None:
                 return Blockchain.CHECK_BLOCK_PREV_NOT_FOUND
-
-        # check if block with previous hash is in blockchain
-        for _, b in self.blocks.items():
-            if b.prev == block.prev:
-                return Blockchain.CHECK_BLOCK_ALREADY_SOLVED
 
         # check block diff
         if (block.h_diff != self.get_h_diff(prev)) or (block.h_diff < h_diff_init) or (block.v_diff != block.get_v_diff()):
@@ -391,10 +385,16 @@ class Blockchain(DictHashable):
         if self.blocks.get(block.hash().hexdigest()) is not None:
             return Blockchain.CHECK_BLOCK_IN_CHAIN
 
-        # check transactions in blockchain
-        for h, _ in block.trans.items():
-            if self.get_trans(h) is not None:
-                return Blockchain.CHECK_BLOCK_TRANS_IN_CHAIN
+        # check if block with previous hash is in blockchain
+        for _, b in self.blocks.items():
+            if b.prev == block.prev:
+                return Blockchain.CHECK_BLOCK_ALREADY_SOLVED
+
+        # check transactions
+        for _, trans in block.trans.items():
+            reason = self.check_trans(trans, block)
+            if reason is not Blockchain.CHECK_TRANS_OK:
+                return reason
 
         return Blockchain.CHECK_BLOCK_OK
 
