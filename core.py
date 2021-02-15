@@ -527,7 +527,7 @@ class Net(DictHashable):
 
     def send(self, data_dict):
         data_json = json.dumps(data_dict).encode()
-        # data_comp = zlib.compress(data_json)
+        data_comp = zlib.compress(data_json)
 
         for peer in self.peers:
             if peer['ipv6'] == self.ipv6:
@@ -535,7 +535,7 @@ class Net(DictHashable):
  
             try:
                 with socket.create_connection((peer['ipv6'], peer['port'])) as sock:
-                    sock.sendall(data_json)
+                    sock.sendall(data_comp)
             except ConnectionRefusedError:
                 continue
             except OSError:
@@ -544,16 +544,18 @@ class Net(DictHashable):
                 continue
 
     def recv(self):
-        sock, adr = self.sock.accept()
-        data_comp = sock.recv(8388608)  # 8MB
-        sock.close()
+        sock, _ = self.sock.accept()
+        data_comp = b''
 
-        if data_comp:
-            # data_json = zlib.decompress(data_comp).decode()
-            data = json.loads(data_comp)
-            return data
-        else:
-            return {}
+        while True:
+            tmp = sock.recv(1024)
+            if not tmp:
+                break
+            data_comp += tmp
+
+        data_json = zlib.decompress(data_comp).decode()
+        data = json.loads(data_json)
+        return data
 
     def to_dict_without_hash(self):
         return {'peers': self.peers}
