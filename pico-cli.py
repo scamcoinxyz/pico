@@ -152,30 +152,31 @@ class MiningServer(CoreServer):
         self.miner = Miner()
         self.trans_cache = []
 
-    def make_trans(self, trans):
-        super().make_trans(trans)
-
-        if self.block is None:
-            self.update_block()
-
+    def cache_trans(self, trans):
         print(f'Transaction {trans.hash().hexdigest()[0:12]} will be in next block.')
         self.trans_cache.append(trans)
 
-    def update_block(self):
-        prev = self.chain.last_block()
-        h_diff = self.chain.get_h_diff(prev)
-        prev_hash = prev.hash().hexdigest() if prev is not None else None
+    def make_trans(self, trans):
+        super().make_trans(trans)
+        self.cache_trans(trans)
 
-        self.block = Block(h_diff, prev_hash, self.usr.pub)
+    def update_block(self):
+        # wait until block will be accepted or rejected
+        while self.chain.get_block_confirms(self.block) is not None:
+            pass
+
+        # generate new block
+        self.block = self.chain.new_block(self.usr.pub)
+
+        # clear transactions queue
+        with self.mtx:
+            for trans in self.trans_cache:
+                self.chain.add_trans(self.block, trans)
+            self.trans_cache.clear()
 
     def add_trans_hlr(self, trans_dict):
         trans = Transaction.from_dict(trans_dict)
-
-        if self.block is None:
-            self.update_block()
-
-        print(f'Transaction {trans.hash().hexdigest()[0:12]} will be in next block.')
-        self.trans_cache.append(trans)
+        self.cache_trans(trans)
 
     def serve_dispatch(self, data):
         super().serve_dispatch(data)
@@ -188,11 +189,6 @@ class MiningServer(CoreServer):
         while True:
             self.update_block()
 
-            with self.mtx:
-                for trans in self.trans_cache:
-                    self.chain.add_trans(self.block, trans)
-                self.trans_cache.clear()
-
             # mining
             self.miner.set_block(self.block)
             self.miner.work()
@@ -202,9 +198,7 @@ class MiningServer(CoreServer):
                 if self.chain.check_block(self.block) is Blockchain.CHECK_BLOCK_OK:
                     reward_act = Reward(self.block.reward(), self.block.hash().hexdigest())
                     reward_trans = Transaction(None, self.block.pow.solver, reward_act)
-
-                    print(f'Transaction {reward_trans.hash().hexdigest()[0:12]} will be in next block.')
-                    self.trans_cache.append(reward_trans)
+                    self.cache_trans(reward_trans)
 
                     self.net.send({'trans': reward_trans.to_dict()})
                     self.net.send({'block': self.block.to_dict()})

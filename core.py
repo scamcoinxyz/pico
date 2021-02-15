@@ -350,7 +350,7 @@ class Blockchain(DictHashable):
         self.blocks = {}
         self.blocks_cache = {}
 
-    def check_trans(self, trans, block):
+    def check_trans(self, trans):
         # check transaction in blockchain
         if self.get_trans(trans.hash().hexdigest()) is not None:
             return Blockchain.CHECK_TRANS_IN_CHAIN
@@ -361,10 +361,18 @@ class Blockchain(DictHashable):
 
         # check reward
         if isinstance(trans.act, Reward):
-            if ((block.prev is not None) and (self.get_block(block.prev) is None)) or (block.pow.solver != trans.to_adr):
+            prev = self.get_block(trans.act.block_hash)
+            if (prev is None) or (prev.pow.solver != trans.to_adr):
                 return Blockchain.CHECK_TRANS_REWARD_NOT_FOUND
 
         return Blockchain.CHECK_TRANS_OK
+
+    def new_block(self, solver):
+        prev = self.last_block()
+        h_diff = self.get_h_diff(prev)
+        prev_hash = prev.hash().hexdigest() if prev is not None else None
+
+        return Block(h_diff, prev_hash, solver)
 
     def check_block(self, block):
         # check previous block
@@ -392,7 +400,7 @@ class Blockchain(DictHashable):
 
         # check transactions
         for _, trans in block.trans.items():
-            reason = self.check_trans(trans, block)
+            reason = self.check_trans(trans)
             if reason is not Blockchain.CHECK_TRANS_OK:
                 return reason
 
@@ -401,7 +409,7 @@ class Blockchain(DictHashable):
     def add_trans(self, block, trans):
         h = trans.hash().hexdigest()
 
-        reason = self.check_trans(trans, block)
+        reason = self.check_trans(trans)
         if reason is not Blockchain.CHECK_TRANS_OK:
             print(f'Transaction {h[0:12]} rejected: {reason}.')
             return
@@ -413,19 +421,20 @@ class Blockchain(DictHashable):
     def add_block(self, block):
         h = block.hash().hexdigest()
 
-        # reject block if check fails
-        reason = self.check_block(block)
-        if reason is not Blockchain.CHECK_BLOCK_OK:
-            print(f'Block {h[0:12]} rejected: {reason}.')
-            return False
-
-        # confirm
         if self.blocks_cache.get(block.prev) is None:
             self.blocks_cache[block.prev] = {}
 
         if self.blocks_cache[block.prev].get(h) is None:
             self.blocks_cache[block.prev][h] = 0
 
+        # reject block if check fails
+        reason = self.check_block(block)
+        if reason is not Blockchain.CHECK_BLOCK_OK:
+            print(f'Block {h[0:12]} rejected: {reason}.')
+            del self.blocks_cache[block.prev][h]
+            return False
+
+        # confirm
         self.blocks_cache[block.prev][h] += 1
         print(f'Block {h[0:12]} confirms: {self.blocks_cache[block.prev][h]}')
 
@@ -440,6 +449,11 @@ class Blockchain(DictHashable):
 
     def get_block(self, block_hash):
         return self.blocks.get(block_hash)
+
+    def get_block_confirms(self, block):
+        if (block is None) or (self.blocks_cache.get(block.prev) is None):
+            return None
+        return self.blocks_cache[block.prev].get(block.hash().hexdigest())
 
     def get_h_diff(self, block_prev):
         if block_prev is None:
