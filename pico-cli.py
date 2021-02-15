@@ -42,17 +42,17 @@ class CLI:
             net.add_peer('2002:c257:65d4::1', 10000)
             return net
 
-        reader = lambda d: Net.from_dict(d)
+        reader = Net.from_dict
         self.net = CoreServer._init_ser_obj(peers_path, reader, maker)
         self.update_self_peer()
 
     def usr_init(self, usr_path):
-        reader = lambda d: CoreServer.usr_login(d)
+        reader = CoreServer.usr_login
         maker = CoreServer.usr_reg
         self.usr = CoreServer._init_ser_obj(usr_path, reader, maker)
 
     def chain_init(self, chain_path):
-        reader = lambda d: Blockchain.from_dict(d)
+        reader = Blockchain.from_dict
         maker = lambda: Blockchain('0.1') # FIXME: fetch blockchain from another node
         self.chain = CoreServer._init_ser_obj(chain_path, reader, maker)
 
@@ -64,7 +64,7 @@ class CLI:
                 return act(passwd)
             except KeyboardInterrupt:
                 exit()
-            except:
+            except Exception:
                 print('Invalid password!')
 
     @staticmethod
@@ -177,6 +177,7 @@ class MiningServer(CoreServer):
         if self.block is None:
             self.update_block()
 
+        print(f'Transaction {trans.hash().hexdigest()[0:12]} will be in next block.')
         self.trans_cache.append(trans)
 
     def serve_dispatch(self, data):

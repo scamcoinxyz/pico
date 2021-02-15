@@ -10,8 +10,7 @@ class MinerBackend:
     def factorint(self, num):
         if self.backend == MinerBackend.MINER_BACKEND_SYMPY:
             return factorint(num)
-        else:
-            raise NotImplementedError()
+        raise NotImplementedError()
 
 
 class Miner:

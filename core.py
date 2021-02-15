@@ -23,6 +23,7 @@ class DictHashable:
     def to_dict_without_hash(self):
         pass
 
+    @staticmethod
     @abstractmethod
     def from_dict_without_hash(obj_dict,*args, **kwargs):
         pass
@@ -47,6 +48,10 @@ class DictHashable:
 
 
 class DictSignable(DictHashable):
+    def __init__(self, pub):
+        self.pub = pub
+        self._sign = None
+
     @abstractmethod
     def to_dict_without_sign(self):
         pass
@@ -58,7 +63,7 @@ class DictSignable(DictHashable):
 
     def verify(self):
         msg = json.dumps(self.to_dict_without_sign()).encode()
-        user = User(None, self.from_adr)
+        user = User(None, self.pub)
         user.verify(msg, self._sign)
 
     def to_dict_without_hash(self):
@@ -187,11 +192,12 @@ class Reward:
 
 class Transaction(DictSignable):
     def __init__(self, from_adr, to_adr, act):
+        super().__init__(from_adr)
+
         self.time = dt.utcnow()
         self.from_adr = from_adr
         self.to_adr = to_adr
         self.act = act
-        self._sign = None
 
     def to_dict_without_sign(self, indent=None):
         data = {
@@ -254,7 +260,7 @@ class ProofOfWork:
         factors = list(self.work.items())[i][1]
 
         # check factors are primes
-        for v, p in factors.items():
+        for v, _ in factors.items():
             if not isprime(int(v)):
                 return False
 
@@ -536,11 +542,7 @@ class Net(DictHashable):
             try:
                 with socket.create_connection((peer['ipv6'], peer['port'])) as sock:
                     sock.sendall(data_comp)
-            except ConnectionRefusedError:
-                continue
-            except OSError:
-                continue
-            except TimeoutError:
+            except Exception:
                 continue
 
     def recv(self):
@@ -560,6 +562,7 @@ class Net(DictHashable):
     def to_dict_without_hash(self):
         return {'peers': self.peers}
 
+    @staticmethod
     def from_dict_without_hash(obj_dict, *args, **kwargs):
         net = Net()
         net.peers = obj_dict['peers']
