@@ -331,6 +331,7 @@ class Blockchain(DictHashable):
     CHECK_BLOCK_IN_CHAIN = 'already in blockchain'
     CHECK_BLOCK_TRANS_IN_CHAIN = 'transactions already in blockchain'
     CHECK_BLOCK_INVALID_DIFF = 'invalid block difficulty'
+    CHECK_BLOCK_ALREADY_SOLVED = 'already solved'
 
     CHECK_TRANS_OK = None
     CHECK_TRANS_IN_CHAIN = 'transaction already in blockchain'
@@ -367,6 +368,11 @@ class Blockchain(DictHashable):
         if block.prev is not None:
             if prev is None:
                 return Blockchain.CHECK_BLOCK_PREV_NOT_FOUND
+
+        # check if block with previous hash is in blockchain
+        for _, b in self.blocks.items():
+            if b.prev == block.prev:
+                return Blockchain.CHECK_BLOCK_ALREADY_SOLVED
 
         # check block diff
         if (block.h_diff != self.get_h_diff(prev)) or (block.h_diff < h_diff_init) or (block.v_diff != block.get_v_diff()):
