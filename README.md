@@ -3,6 +3,9 @@
 # PicoCoin
 Tiny IOT-oriented CPU cryptocurrency written in [Python3](https://www.python.org/).
 
+[Pico](https://en.wikipedia.org/wiki/Pico-) is a unit prefix in the metric system denoting a factor of 1 trillionth (`10 ^ (-12)`).
+Coin name is consistent with its purpose - to work on small computing devices.
+
 Dependencies:
 * [base58](https://pypi.org/project/base58/)
 * [pycryptodome](https://pypi.org/project/pycryptodome/)
@@ -12,25 +15,22 @@ Dependencies:
 ### Features
 * Tiny crossplatform blockchain platform with minimum dependencies.
 * All data represents in [json](https://en.wikipedia.org/wiki/JSON) format.
-* Modern [ipv6](https://en.wikipedia.org/wiki/IPv6) internet protocol. [See `Notes: 1`]
+* Modern [ipv6](https://en.wikipedia.org/wiki/IPv6) internet protocol. [see `Notes: 1`]
 * Modern [sha-3](https://en.wikipedia.org/wiki/SHA-3) hashing algorithm and [ECC](https://en.wikipedia.org/wiki/Elliptic-curve_cryptography).
-* Hard to parallel mining algorithm (recursive sequence of [integers factorization](https://en.wikipedia.org/wiki/Integer_factorization)). [See `Notes: 2`]
-* 2D difficulty. [See `Notes: 3`].
-* All miners earn coins. [See `Notes: 4`].
-* Block solver protection. [See `Notes: 5`].
+* Hard to parallel mining algorithm (recursive sequence of [integers factorization](https://en.wikipedia.org/wiki/Integer_factorization)). [see `Notes: 2`]
+* 2D difficulty. [see `Notes: 3`].
+* All miners earn coins. [see `Notes: 4`].
+* Block solver protection. [see `Notes: 5`].
 * Oriented to use in weak computing devices like [Orange PI](http://www.orangepi.org/orangepizero/) or [RPI](https://www.raspberrypi.org/).
 * Transactions can be used for coins transfer, send messages or some device actions. For example, turn on the smart lamp ([IOT](https://en.wikipedia.org/wiki/Internet_of_things)).
 
 Notes:
 1. Now using [Teredo](https://en.wikipedia.org/wiki/Teredo_tunneling) tunneling or [6to4](https://en.wikipedia.org/wiki/6to4) for emulating ipv6 over ipv4.
 2. Cores count has no advantage. Single core compute power is more important.
-3. **Horizontal** difficulty for factorization and **vertical** for recurse depth (see `Mining algorithm`).
-4. All miners get a piece of reward for their work, if they done it before the next block will be solved (see `Analysis.Mining reward`).
-5. Mining algorithm designed in as such way that **proof of work** is related to **block solver**. To cheat it you have to redone all work again (see `Mining algorithm`).
+3. **Horizontal** difficulty for factorization and **vertical** for recurse depth (see [Mining algorithm](#mining-algorithm)).
+4. All miners get a piece of reward for their work, always (see [Analysis.Mining reward](#mining-reward) and [Analysis.Archeologing](#archeologing)).
+5. Mining algorithm designed in as such way that **proof of work** is related to **block solver**. To cheat it you have to redone all work again (see [Mining algorithm](#mining-algorithm)).
 
-
-[Pico](https://en.wikipedia.org/wiki/Pico-) is a unit prefix in the metric system denoting a factor of 1 trillionth (`10 ^ (-12)`).
-Coin name is consistent with its purpose - to work on small computing devices.
 
 ### Usage
 1. Get current balance and exit:
@@ -75,7 +75,7 @@ git clone https://github.com/architector1324/PicoCoin
 sudo apt install miredo
 ```
 
-If you have static ip adress use [6to4](https://www.opennet.ru/docs/HOWTO/Linux+IPv6-HOWTO/configuring-ipv6to4-tunnels.html) instead.
+If you have static ip address use [6to4](https://www.opennet.ru/docs/HOWTO/Linux+IPv6-HOWTO/configuring-ipv6to4-tunnels.html) instead.
 
 3. Get python dependencies:
 ```bash
@@ -98,7 +98,7 @@ git.exe clone https://github.com/architector1324/PicoCoin
 
 2. Enable [teredo](https://letmegooglethat.com/?q=how+to+enable+teredo+windows+10) in Windows for ipv6 tunneling.
 
-If you have static ip adress use [6to4](https://letmegooglethat.com/?q=6to4+windows) instead.
+If you have static ip address use [6to4](https://letmegooglethat.com/?q=6to4+windows) instead.
 
 3. Get python dependencies:
 ```bash
@@ -210,8 +210,8 @@ API:
 {
     "prev": <hash of previous block | str>,
     "time": <UTC timestamp: year-month-day hour:minute:second.millis | str>,
-    "h_diff": <horizontal difficulty (see Mining algorithm.Horizontal difficulty) | int>,
-    "v_diff": <vertical difficulty (see Mining algorithm.Vertical difficulty) | int>,
+    "h_diff": <horizontal difficulty (see [Mining algorithm.Horizontal difficulty](#horizontal-difficulty)) | int>,
+    "v_diff": <vertical difficulty (see [Mining algorithm.Vertical difficulty](#vertical-difficulty)) | int>,
     "trans": [
         <transaction hash>: <transaction | Transaction>
         ...
@@ -527,13 +527,16 @@ At least total result block:
 As you can see, the **proof of work** depends on **block solver** public key. If you change it, you have to recompute all work again.
 
 ### Analysis
+
 #### Mining reward
-Now network is designed for an average of 1M users and about 100k miners (10% of network).
-All miners get a reward for their work, if they done it before the next block will be solved.
+All miners get a reward for their work, it's a platform philosophy.
 
-First block solver is fully rewarded, all other miners get `reward / 1000000`. If more than 10% of all users will be miners - the piece of reward will decrease proportionally.
+First block solver is fully rewarded, all other miners get 10% of reward divided by miners count:
+```
+mining reward = (first block solver reward) / (10 * miners count)
+```
 
-Why only 10% and 1 / 1000000?
+Why only 10%?
 
 For example, the reward for block solving is `256` coins.
 Horizontal difficulty increase and reward decrease every 10000 blocks (let's call it `round`).
@@ -541,10 +544,23 @@ Horizontal difficulty increase and reward decrease every 10000 blocks (let's cal
 So, total coin emission for round will be `2560000` coins.
 Okay, single miner that does not solve block first gets `0.000256` coins per block and totally `2.56` coins per round.
 
-If there are 10% such miners of 1M users, round coin emission will be increased to `256000` coins.
+If there are 10% such miners, round coin emission will be increased to `256000` coins.
 
 So maximum emission per round will be not changed so much - `2816000` coins.
 In other words, it's a mechanism to prevent the inflation.
+
+#### Archeologing
+Miner always gets a reward even if it will take a long time and the blockchain will go far ahead.
+
+So, what prevents miner from receiving a reward for a very first block? Or second and so on? After all, he could just mine it for a very very long time from beginning, it is impossible to find it out.
+
+This hack is a new mechanics in addition to mining that i called **archeologing**.
+
+Miner can get a reward for mining a block that is already in the blockchain. But only once, because blockchain checks a reward for blocks. Of course, you will not get full reward the same as for a new block:
+
+```
+archeologing reward = (current block reward) / (10 * miners count)
+```
 
 #### Coin calculation
 
