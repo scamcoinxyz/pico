@@ -22,7 +22,7 @@ Dependencies:
 * Transactions can be used for coins transfer, send messages or some device actions. For example, turn on the smart lamp ([IOT](https://en.wikipedia.org/wiki/Internet_of_things)).
 
 Notes:
-1. Now using [Teredo](https://en.wikipedia.org/wiki/Teredo_tunneling) tunneling for emulating ipv6 over ipv4.
+1. Now using [Teredo](https://en.wikipedia.org/wiki/Teredo_tunneling) tunneling or [6to4](https://en.wikipedia.org/wiki/6to4) for emulating ipv6 over ipv4.
 2. Cores count has no advantage. Single core compute power is more important.
 3. **Horizontal** difficulty for factorization and **vertical** for recurse depth (see `Mining algorithm`).
 4. All miners get a piece of reward for their work, if they done it before the next block will be solved (see `Analysis.Mining reward`).
@@ -75,6 +75,8 @@ git clone https://github.com/architector1324/PicoCoin
 sudo apt install miredo
 ```
 
+If you have static ip adress use [6to4](https://www.opennet.ru/docs/HOWTO/Linux+IPv6-HOWTO/configuring-ipv6to4-tunnels.html) instead.
+
 3. Get python dependencies:
 ```bash
 pip3 install base58 pycryptodome ecdsa sympy
@@ -95,6 +97,8 @@ git.exe clone https://github.com/architector1324/PicoCoin
 ```
 
 2. Enable [teredo](https://letmegooglethat.com/?q=how+to+enable+teredo+windows+10) in Windows for ipv6 tunneling.
+
+If you have static ip adress use [6to4](https://letmegooglethat.com/?q=6to4+windows) instead.
 
 3. Get python dependencies:
 ```bash
