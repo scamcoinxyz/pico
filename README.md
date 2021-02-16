@@ -11,6 +11,7 @@ Dependencies:
 * [pycryptodome](https://pypi.org/project/pycryptodome/)
 * [ecdsa](https://pypi.org/project/ecdsa/)
 * [sympy](https://pypi.org/project/sympy/)
+* [dacite](https://pypi.org/project/dacite/)
 
 ### Features
 * Tiny crossplatform blockchain platform with minimum dependencies.
@@ -79,7 +80,7 @@ If you have static ip address use [6to4](https://www.opennet.ru/docs/HOWTO/Linux
 
 3. Get python dependencies:
 ```bash
-pip3 install base58 pycryptodome ecdsa sympy
+pip3 install base58 pycryptodome ecdsa sympy dacite
 ```
 
 4. Run cli:
