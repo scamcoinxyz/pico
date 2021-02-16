@@ -19,22 +19,27 @@ block_confirms_count = 6
 
 
 class DictHashable:
+    def __init__(self):
+        self._hash = None
+
+    def verify(self):
+        if self._hash == obj.hash().hexdigest():
+            return True
+        return False
+
     @abstractmethod
     def to_dict_without_hash(self):
         pass
 
     @staticmethod
     @abstractmethod
-    def from_dict_without_hash(obj_dict,*args, **kwargs):
+    def from_dict_without_hash(obj_dict, *args, **kwargs):
         pass
 
     @classmethod
     def from_dict(cls, obj_dict, *args, **kwargs):
         obj = cls.from_dict_without_hash(obj_dict, *args, **kwargs)
-
-        expected_hash = obj_dict['hash']
-        if expected_hash != obj.hash().hexdigest():
-            raise ValueError('Invalid hash!', obj_dict)
+        obj._hash = obj_dict['hash']
         return obj
 
     def to_dict(self):
@@ -56,15 +61,31 @@ class DictSignable(DictHashable):
     def to_dict_without_sign(self):
         pass
 
+    @staticmethod
+    @abstractmethod
+    def from_dict_without_sign(obj_dict, *args, **kwargs):
+        pass
+
+    @classmethod
+    def from_dict_without_hash(cls, obj_dict, *args, **kwargs):
+        obj = cls.from_dict_without_sign(obj_dict, *args, **kwargs)
+        obj._sign = obj_dict['sign']
+        return obj
+
     def sign(self, user, password):
         msg = json.dumps(self.to_dict_without_sign()).encode()
         self._sign = user.sign(msg, password)
         return self._sign
 
     def verify(self):
-        msg = json.dumps(self.to_dict_without_sign()).encode()
-        user = User(None, self.pub)
-        user.verify(msg, self._sign)
+        try:
+            msg = json.dumps(self.to_dict_without_sign()).encode()
+            user = User(None, self.pub)
+            user.verify(msg, self._sign)
+
+            return super().verify()
+        except Exception:
+            return False
 
     def to_dict_without_hash(self):
         d = self.to_dict_without_sign()
@@ -209,7 +230,7 @@ class Transaction(DictSignable):
         return data
 
     @staticmethod
-    def from_dict_without_hash(trans_dict):
+    def from_dict_without_sign(trans_dict):
         act_str = list(trans_dict['act'].items())[0][0]
 
         # create transaction
@@ -222,10 +243,6 @@ class Transaction(DictSignable):
 
         trans = Transaction(trans_dict['from'], trans_dict['to'], act)
         trans.time = trans_dict['time']
-        trans._sign = trans_dict['sign']
-
-        if trans.from_adr is not None:
-            trans.verify()
         return trans
 
 
@@ -492,7 +509,6 @@ class Blockchain(DictHashable):
         return self.blocks_count() // 10000
 
     def reward(self):
-        last = self.last_block()
         return 2 ** (8 - 8 * self.round() / 50)
 
     def to_dict_without_hash(self):
