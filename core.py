@@ -292,9 +292,6 @@ class Block(DictHashable):
     def add_pow(self, num, factors):
         self.pow.add_pow(num, factors)
 
-    def reward(self):
-        return 2 ** (8 - 8 * (self.h_diff - h_diff_init) / 50)
-
     def work_check(self):
         return self.pow.work_check()
 
@@ -490,6 +487,13 @@ class Blockchain(DictHashable):
 
     def blocks_count(self):
         return len(self.blocks.items())
+
+    def round(self):
+        return self.blocks_count() // 10000
+
+    def reward(self):
+        last = self.last_block()
+        return 2 ** (8 - 8 * self.round() / 50)
 
     def to_dict_without_hash(self):
         data = {

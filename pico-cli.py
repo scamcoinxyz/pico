@@ -192,11 +192,11 @@ class MiningServer(CoreServer):
             # mining
             self.miner.set_block(self.block)
             self.miner.work()
-            print(f'Block {self.block.hash().hexdigest()[0:12]} solved: reward {self.block.reward()} picocoins.')
+            print(f'Block {self.block.hash().hexdigest()[0:12]} solved: reward {self.chain.reward()} picocoins.')
 
             with self.mtx:
                 if self.chain.check_block(self.block) is Blockchain.CHECK_BLOCK_OK:
-                    reward_act = Reward(self.block.reward(), self.block.hash().hexdigest())
+                    reward_act = Reward(self.chain.reward(), self.block.hash().hexdigest())
                     reward_trans = Transaction(None, self.block.pow.solver, reward_act)
                     self.cache_trans(reward_trans)
 
