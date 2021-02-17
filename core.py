@@ -4,9 +4,9 @@ import base58
 import socket
 import hashlib as hlib
 
-from typing import Union, Optional, Dict, List
 from functools import reduce
 from datetime import datetime as dt
+from typing import Union, Optional, Dict, List
 from dataclasses import dataclass, asdict, field
 
 from Crypto.Cipher import AES
@@ -55,9 +55,9 @@ class DataSignable(DataHashable):
         try:
             self_dict = self.to_dict_without_sign()
             User.verify(pub, json.dumps(self_dict).encode(), self.sign)
-            return super().dict_verify()
+            return (super().dict_verify(), True)
         except Exception:
-            return False
+            return (super().dict_verify(), False)
 
     def dict_sign(self, user, password):
         self_dict = self.to_dict_without_sign()
@@ -238,6 +238,7 @@ class Block(DataHashable):
 
 class BlockCheck:
     OK = None
+    INVALID_HASH = 'invalid hash'
     PREV_NOT_FOUND = 'previous block not found'
     POW_FAILED = 'proof of work was failed'
     IN_CHAIN = 'already in blockchain'
@@ -247,6 +248,8 @@ class BlockCheck:
 
 class TransCheck:
     OK = None
+    INVALID_HASH = 'invalid hash'
+    INVALID_SIGN = 'invalid digital signature'
     IN_CHAIN = 'transaction already in blockchain'
     INSUFF_COINS = 'insufficient coins'
     REWARD_NOT_FOUND = 'reward block not found'
@@ -267,6 +270,14 @@ class Blockchain(DataHashable):
         super().__post_init__()
 
     def check_trans(self, trans):
+        # check hash and sign
+        check_hash, check_sign = trans.dict_verify(trans.from_adr)
+        if not check_hash:
+            return TransCheck.INVALID_HASH
+
+        if not check_sign:
+            return TransCheck.INVALID_SIGN
+
         # check transaction in blockchain
         if self.get_trans(trans.dict_hash()) is not None:
             return TransCheck.IN_CHAIN
@@ -291,6 +302,10 @@ class Blockchain(DataHashable):
         return Block(h_diff=h_diff, prev=prev_hash, trans={}, pow=ProofOfWork(solver), hash=None)
 
     def check_block(self, block):
+        # check hash
+        if not block.dict_verify():
+            return BlockCheck.INVALID_HASH
+
         # check previous block
         prev = self.get_block(block.prev)
         if block.prev is not None:
