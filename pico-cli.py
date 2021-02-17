@@ -167,7 +167,7 @@ class MiningServer(CoreServer):
 
     def update_block(self):
         # wait until block will be accepted or rejected
-        while self.chain.get_block_confirms(self.block) is not None:
+        while self.chain.get_block_confirms(self.block):
             pass
 
         # generate new block
@@ -187,7 +187,7 @@ class MiningServer(CoreServer):
         super().serve_dispatch(data)
 
         # add trans
-        if data.get('trans') is not None:
+        if data.get('trans'):
             self.add_trans_hlr(data['trans'])
 
     def serve_mining(self):
@@ -245,7 +245,7 @@ if __name__ == '__main__':
     serv.net_init(args.peers)
 
     # make transaction
-    if args.trans is not None:
+    if args.trans:
         to = args.trans[0]
         act_args = args.trans[2]
  

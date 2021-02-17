@@ -174,7 +174,7 @@ class ProofOfWork:
         self.block = None
 
     @staticmethod
-    def _primes_int(factors):
+    def defact(factors):
         return reduce(lambda prev, factor: prev * (int(factor[0]) ** factor[1]), factors.items(), 1)
 
     def set_block(self, block):
@@ -185,33 +185,21 @@ class ProofOfWork:
 
     def extract(self, i):
         data = self.block.to_dict_without_hash()
-        data['pow'] = {
-            'solver': self.solver,
-            'work': {n: f for n, f in list(self.work.items())[0:i]}
-        }
-        blk = json.dumps(data).encode()
+        data['pow']['work'] = {n: f for n, f in list(self.work.items())[0:i]}
 
-        h = hlib.sha3_256(blk).digest()
-        num_b = h[0:self.block.h_diff]
-
-        return int.from_bytes(num_b, byteorder='little')
+        h = hlib.sha3_256(json.dumps(data).encode()).digest()
+        return int.from_bytes(h[0:self.block.h_diff], byteorder='little')
 
     def work_check_h(self, i):
         num = self.extract(i)
         factors = list(self.work.items())[i][1]
 
         # check factors are primes
-        for v, _ in factors.items():
-            if not isprime(int(v)):
-                return False
-
-        return True if (num == self._primes_int(factors)) else False
+        are_primes = all(isprime(int(v)) for v in factors.keys())
+        return are_primes and (num == self.defact(factors))
 
     def work_check(self):
-        for i in range(self.block.v_diff):
-            if not self.work_check_h(i):
-                return False
-        return True
+        return all(self.work_check_h(i) for i in range(self.block.v_diff))
 
 
 @dataclass
@@ -276,73 +264,12 @@ class Blockchain(DataHashable):
         self.blocks_cache = {}
         super().__post_init__()
 
-    def check_trans(self, trans):
-        # check hash and sign
-        check_hash, check_sign = trans.dict_verify(trans.from_adr)
-        if not check_hash:
-            return TransCheck.INVALID_HASH
-
-        if (trans.from_adr is not None) and (not check_sign):
-            return TransCheck.INVALID_SIGN
-
-        # check transaction in blockchain
-        if self.get_trans(trans.dict_hash()) is not None:
-            return TransCheck.IN_CHAIN
-
-        # check billing balance
-        if isinstance(trans.act, Payment) and self.get_bal(trans.from_adr) < trans.act.amount:
-            return TransCheck.INSUFF_COINS
-
-        # check reward
-        if isinstance(trans.act, Reward):
-            prev = self.get_block(trans.act.blk)
-            if (prev is None) or (prev.pow.solver != trans.to_adr):
-                return TransCheck.REWARD_NOT_FOUND
-
-        return TransCheck.OK
-
     def new_block(self, solver):
         prev = self.last_block()
         h_diff = self.get_h_diff(prev)
-        prev_hash = prev.dict_hash() if prev is not None else None
+        prev_hash = prev.dict_hash() if prev else None
 
         return Block(h_diff=h_diff, prev=prev_hash, trans={}, pow=ProofOfWork(solver), hash=None)
-
-    def check_block(self, block):
-        # check hash
-        if not block.dict_verify():
-            return BlockCheck.INVALID_HASH
-
-        # check previous block
-        prev = self.get_block(block.prev)
-        if block.prev is not None:
-            if prev is None:
-                return BlockCheck.PREV_NOT_FOUND
-
-        # check block diff
-        if (block.h_diff != self.get_h_diff(prev)) or (block.h_diff < Blockchain.H_DIFF_INIT) or (block.v_diff != block.get_v_diff()):
-            return BlockCheck.INVALID_DIFF
-
-        # check pow
-        if not block.work_check():
-            return BlockCheck.POW_FAILED
-
-        # check if block is in blockchain
-        if self.blocks.get(block.dict_hash()) is not None:
-            return BlockCheck.IN_CHAIN
-
-        # check if block with previous hash is in blockchain
-        for _, b in self.blocks.items():
-            if b.prev == block.prev:
-                return BlockCheck.ALREADY_SOLVED
-
-        # check transactions
-        for _, trans in block.trans.items():
-            reason = self.check_trans(trans)
-            if reason is not TransCheck.OK:
-                return reason
-
-        return BlockCheck.OK
 
     def add_trans(self, block, trans):
         h = trans.dict_hash()
@@ -396,44 +323,98 @@ class Blockchain(DataHashable):
     def get_h_diff(self, block_prev):
         if block_prev is None:
             return Blockchain.H_DIFF_INIT
-        return block_prev.h_diff + (1 if self.blocks_count() % 10000 == 0 else 0)
+        return block_prev.h_diff + int(self.blocks_count() % 10000 == 0)
 
     def get_trans(self, trans_hash):
-        for _, block in self.blocks.items():
-            trans = block.trans.get(trans_hash)
-            if trans is not None:
-                return trans
-        return None
+            return [block.trans[trans_hash] for block in self.blocks.values() if block.trans.get(trans_hash)]
 
     def get_bal(self, usr_pub):
-        bal = 0
-        for _, block in self.blocks.items():
-            for _, trans in block.trans.items():
-                if isinstance(trans.act, Payment):
-                    if trans.to_adr == usr_pub:
-                        bal += trans.act.pay
-                    elif trans.from_adr == usr_pub:
-                        bal -= trans.act.pay
-                elif isinstance(trans.act, Reward):
-                    if trans.to_adr == usr_pub:
-                        bal += trans.act.rew
-        return bal
+        def filt(trans):
+            if isinstance(trans.act, Payment):
+                if trans.to_adr == usr_pub:
+                    return trans.act.pay
+                elif trans.from_adr == usr_pub:
+                    return -trans.act.pay
+            elif isinstance(trans.act, Reward) and trans.to_adr == usr_pub:
+                    return trans.act.rew
+
+        return sum(filt(trans) for block in self.blocks.values() for trans in block.trans.values())
 
     def last_block(self):
         try:
-            tmp = list(self.blocks.items())
-            return tmp[len(tmp) - 1][1]
+            tmp = list(self.blocks.values())
+            return tmp[len(tmp) - 1]
         except IndexError:
             return None
 
     def blocks_count(self):
-        return len(self.blocks.items())
+        return len(self.blocks.keys())
 
     def round(self):
         return self.blocks_count() // 10000
 
     def reward(self):
         return 2 ** (8 - 8 * self.round() / 50)
+
+    def check_trans(self, trans):
+        # check hash and sign
+        check_hash, check_sign = trans.dict_verify(trans.from_adr)
+        if not check_hash:
+            return TransCheck.INVALID_HASH
+
+        if trans.from_adr and (not check_sign):
+            return TransCheck.INVALID_SIGN
+
+        # check transaction in blockchain
+        if self.get_trans(trans.dict_hash()):
+            return TransCheck.IN_CHAIN
+
+        # check billing balance
+        if isinstance(trans.act, Payment) and self.get_bal(trans.from_adr) < trans.act.amount:
+            return TransCheck.INSUFF_COINS
+
+        # check reward
+        if isinstance(trans.act, Reward):
+            prev = self.get_block(trans.act.blk)
+            if (prev is None) or (prev.pow.solver != trans.to_adr):
+                return TransCheck.REWARD_NOT_FOUND
+
+        return TransCheck.OK
+
+    def check_block(self, block):
+        # check hash
+        if not block.dict_verify():
+            return BlockCheck.INVALID_HASH
+
+        # check previous block
+        prev = self.get_block(block.prev)
+        if block.prev:
+            if prev is None:
+                return BlockCheck.PREV_NOT_FOUND
+
+        # check block diff
+        if (block.h_diff != self.get_h_diff(prev)) or (block.h_diff < Blockchain.H_DIFF_INIT) or (block.v_diff != block.get_v_diff()):
+            return BlockCheck.INVALID_DIFF
+
+        # check pow
+        if not block.work_check():
+            return BlockCheck.POW_FAILED
+
+        # check if block is in blockchain
+        if self.blocks.get(block.dict_hash()):
+            return BlockCheck.IN_CHAIN
+
+        # check if block with previous hash is in blockchain
+        if any(b.prev == block.prev for b in self.blocks.values()):
+            return BlockCheck.ALREADY_SOLVED
+
+        # check transactions
+        for trans in block.trans.values():
+            reason = self.check_trans(trans)
+            if reason is not TransCheck.OK:
+                return reason
+
+        return BlockCheck.OK
 
 
 @dataclass
@@ -455,18 +436,13 @@ class Net(DataHashable):
         self.peers.append(peer)
 
     def update_peer(self, peer):
-        for p in self.peers:
-            if p == peer:
-                return False
-
-        self.add_peer(peer)
-        return True
+        uniq = not any(p == peer for p in self.peers)
+        if uniq:
+            self.add_peer(peer)
+        return uniq
 
     def update_peers(self, peers):
-        updated = False
-        for peer in peers:
-            updated = updated or self.update_peer(peer)
-        return updated
+        return reduce(lambda u, p: u or self.update_peer(p), peers, False)
 
     def get_ipv6(self):
         # google dns
