@@ -135,12 +135,12 @@ class User(DataHashable):
 
 @dataclass
 class Invoice:
-    ivc: int
+    ivc: float
 
 
 @dataclass
 class Payment:
-    pay: int
+    pay: float
 
 
 @dataclass
@@ -411,12 +411,12 @@ class Blockchain(DataHashable):
             for _, trans in block.trans.items():
                 if isinstance(trans.act, Payment):
                     if trans.to_adr == usr_pub:
-                        bal += trans.act.amount
+                        bal += trans.act.pay
                     elif trans.from_adr == usr_pub:
-                        bal -= trans.act.amount
+                        bal -= trans.act.pay
                 elif isinstance(trans.act, Reward):
                     if trans.to_adr == usr_pub:
-                        bal += trans.act.amount
+                        bal += trans.act.rew
         return bal
 
     def last_block(self):
