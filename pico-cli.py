@@ -130,8 +130,8 @@ class CoreServer(CLI):
         if self.chain.check_block(block) is BlockCheck.OK:
             self.net.send({'block': block.to_dict()})
 
-            if self.chain.add_block(block):
-                self._dict_to_disk(self.chain, 'blockchain.json')
+        if self.chain.add_block(block):
+            self._dict_to_disk(self.chain, 'blockchain.json')
 
     def serve_dispatch(self, data):
         hlr_map = {

@@ -19,7 +19,7 @@ class DataHashable:
     hash: Optional[str]
 
     def __post_init__(self):
-        self.hash = self.dict_hash()
+        self.hash = self.dict_hash() if self.hash is None else self.hash
 
     def to_dict_without_hash(self):
         return {k: v for k, v in asdict(self).items() if k != 'hash'}
@@ -64,6 +64,15 @@ class DataSignable(DataHashable):
         self.sign = user.sign(json.dumps(self_dict).encode(), password)
         self.hash = self.dict_hash()
         return self.sign
+
+
+@dataclass
+class DataTimestamp:
+    time: str = field(init=False)
+
+    def __post_init__(self):
+        if vars(self).get('time') is None:
+            self.time = str(dt.utcnow())
 
 
 @dataclass
@@ -146,15 +155,14 @@ class Reward:
 
 
 @dataclass
-class Transaction(DataSignable):
-    time: str = field(init=False)
+class Transaction(DataTimestamp, DataSignable):
     from_adr: Union[str, None]
     to_adr: str
     act: Union[Invoice, Payment, Reward, Message]
 
     def __post_init__(self):
-        self.time = str(dt.utcnow())
-        super().__post_init__()
+        super(Transaction, self).__post_init__()
+        super(DataTimestamp, self).__post_init__()
 
 
 @dataclass
@@ -207,19 +215,18 @@ class ProofOfWork:
 
 
 @dataclass
-class Block(DataHashable):
+class Block(DataTimestamp, DataHashable):
     prev: Union[str, None]
-    time: str = field(init=False)
     h_diff: int
     v_diff: int = field(init=False)
     trans: Dict[str, Transaction]
     pow: ProofOfWork
 
     def __post_init__(self):
-        self.time = str(dt.utcnow())
         self.v_diff = self.get_v_diff()
         self.pow.set_block(self)
-        super().__post_init__()
+        super(Block, self).__post_init__()
+        super(DataTimestamp, self).__post_init__()
 
     def get_v_diff(self):
         return max(1, 2 ** (13 - 3 * self.h_diff // 8))
@@ -275,7 +282,7 @@ class Blockchain(DataHashable):
         if not check_hash:
             return TransCheck.INVALID_HASH
 
-        if not check_sign:
+        if (trans.from_adr is not None) and (not check_sign):
             return TransCheck.INVALID_SIGN
 
         # check transaction in blockchain
@@ -443,7 +450,7 @@ class Net(DataHashable):
         self.ipv6 = self.get_ipv6()
         self.sock = socket.create_server(('::0', 10000), family=socket.AF_INET6)
         super().__post_init__()
-    
+
     def add_peer(self, peer):
         self.peers.append(peer)
 
