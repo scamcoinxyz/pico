@@ -1,9 +1,10 @@
 import json
 import argparse
+import asyncio
 import os.path
 
 from getpass import getpass
-from threading import Thread, Lock
+from aiofile import async_open
 
 from dacite import from_dict
 
@@ -18,24 +19,24 @@ class CLI:
         self.chain = None
 
     @staticmethod
-    def _dict_to_disk(obj, obj_path):
-        with open(obj_path, 'w') as f:
+    async def _dict_to_disk(obj, obj_path):
+        async with async_open(obj_path, 'w') as f:
             obj_json = json.dumps(obj.to_dict(), indent=4)
-            f.write(obj_json)
+            await f.write(obj_json)
 
     @staticmethod
-    def _dict_from_disk(obj_path):
-        with open(obj_path, 'r') as f:
-            return json.loads(f.read())
+    async def _dict_from_disk(obj_path):
+        async with async_open(obj_path, 'r') as f:
+            return json.loads(await f.read())
 
     @staticmethod
     def _init_ser_obj(obj_path, obj_reader, obj_maker):
         obj = None
         if os.path.exists(obj_path):
-            obj = obj_reader(CLI._dict_from_disk(obj_path))
+            obj = obj_reader(asyncio.run(CLI._dict_from_disk(obj_path)))
         else:
             obj = obj_maker()
-            CLI._dict_to_disk(obj, obj_path)
+            asyncio.run(CLI._dict_to_disk(obj, obj_path))
         return obj
 
     def net_init(self, peers_path):
@@ -46,18 +47,19 @@ class CLI:
             return net
 
         reader = lambda d: from_dict(Net, d)
-        self.net = CoreServer._init_ser_obj(peers_path, reader, maker)
+        self.net = CLI._init_ser_obj(peers_path, reader, maker)
         self.update_self_peer()
 
     def usr_init(self, usr_path):
-        reader = CoreServer.usr_login
-        maker = CoreServer.usr_reg
-        self.usr = CoreServer._init_ser_obj(usr_path, reader, maker)
+        reader = CLI.usr_login
+        maker = CLI.usr_reg
+        self.usr = CLI._init_ser_obj(usr_path, reader, maker)
 
     def chain_init(self, chain_path):
+        # FIXME: fetch blockchain from another node
         reader = lambda d: from_dict(Blockchain, d)
-        maker = lambda: Blockchain(ver='0.1', blocks={}, hash=None) # FIXME: fetch blockchain from another node
-        self.chain = CoreServer._init_ser_obj(chain_path, reader, maker)
+        maker = lambda: Blockchain(ver='0.1', blocks={}, hash=None)
+        self.chain = CLI._init_ser_obj(chain_path, reader, maker)
 
     @staticmethod
     def act_with_passwd(act):
@@ -85,55 +87,53 @@ class CLI:
                 exit()
 
     def passwd(self):
-        return CoreServer.act_with_passwd(self.usr.check_passwd)
+        return CLI.act_with_passwd(self.usr.check_passwd)
 
     @staticmethod
     def usr_login(usr_dict):
-        act = lambda passwd: from_dict(User, usr_dict)
-        return CoreServer.act_with_passwd(act)
+        return from_dict(User, usr_dict)
 
     @staticmethod
     def usr_reg():
         print('No user presented, register new one.')
-        return User.create(CoreServer.gen_passwd())
+        return User.create(CLI.gen_passwd())
 
     def make_trans(self, trans):
         ans = input('Do u want to make a transaction? [y/n]: ')
         if ans in ('y', 'Y'):
             trans.sign(self.usr, self.passwd())
-            self.net.send({'trans': trans.to_dict()})
+            asyncio.run(self.net.send({'trans': trans.to_dict()}))
             print(trans.to_dict())
 
     def update_self_peer(self):
         self.net.update_peer(Peer(self.net.ipv6, 10000))
-        self.net.send(self.net.to_dict())
-        self._dict_to_disk(self.net, 'peers.json')
+        asyncio.run(self.net.send(self.net.to_dict()))
+        asyncio.run(self._dict_to_disk(self.net, 'peers.json'))
 
 
 class CoreServer(CLI):
     def __init__(self):
         super().__init__()
-        self.mtx = Lock()
 
-    def update_peers_hlr(self, peers_dict):
+    async def update_peers_hlr(self, peers_dict):
         peers = [Peer(peer['ipv6'], peer['port']) for peer in peers_dict]
 
         if self.net.update_peers(peers):
             print('Peers updated.')
 
-            self.net.send({'peers': peers_dict})
-            self._dict_to_disk(self.net, 'peers.json')
+            await self.net.send({'peers': peers_dict})
+            await self._dict_to_disk(self.net, 'peers.json')
 
-    def add_block_hlr(self, block_dict):
+    async def add_block_hlr(self, block_dict):
         block = from_dict(Block, block_dict)
 
         if self.chain.check_block(block) is BlockCheck.OK:
-            self.net.send({'block': block.to_dict()})
+            await self.net.send({'block': block.to_dict()})
 
         if self.chain.add_block(block):
-            self._dict_to_disk(self.chain, 'blockchain.json')
+            await self._dict_to_disk(self.chain, 'blockchain.json')
 
-    def serve_dispatch(self, data):
+    async def serve_dispatch(self, data):
         hlr_map = {
             'peers': self.update_peers_hlr,
             'block': self.add_block_hlr
@@ -141,13 +141,11 @@ class CoreServer(CLI):
 
         for key, hlr in hlr_map.items():
             if data.get(key):
-                hlr(data[key])
+                await hlr(data[key])
 
-    def serve_forever(self):
+    async def serve_forever(self):
         while True:
-            data = self.net.recv()
-            with self.mtx:
-                self.serve_dispatch(data)
+            await self.net.handle(self.serve_dispatch)
 
 
 class MiningServer(CoreServer):
@@ -165,57 +163,57 @@ class MiningServer(CoreServer):
         super().make_trans(trans)
         self.cache_trans(trans)
 
-    def update_block(self):
+    async def update_block(self):
         # wait until block will be accepted or rejected
         while self.chain.get_block_confirms(self.block):
-            pass
+            await asyncio.sleep(0)
 
         # generate new block
         self.block = self.chain.new_block(self.usr.pub)
 
         # clear transactions queue
-        with self.mtx:
-            for trans in self.trans_cache:
-                self.chain.add_trans(self.block, trans)
-            self.trans_cache.clear()
+        for trans in self.trans_cache:
+            self.chain.add_trans(self.block, trans)
+        self.trans_cache.clear()
 
     def add_trans_hlr(self, trans_dict):
         trans = from_dict(Transaction, trans_dict)
         self.cache_trans(trans)
 
-    def serve_dispatch(self, data):
-        super().serve_dispatch(data)
+    async def serve_dispatch(self, data):
+        await super().serve_dispatch(data)
 
         # add trans
         if data.get('trans'):
             self.add_trans_hlr(data['trans'])
 
-    def serve_mining(self):
+    async def serve_mining(self):
         while True:
-            self.update_block()
+            await self.update_block()
 
             # mining
             self.miner.set_block(self.block)
-            self.miner.work()
+            await self.miner.work()
             print(f'Block {self.block.dict_hash()[0:12]} solved: reward {self.chain.reward()} picocoins.')
 
-            with self.mtx:
-                if self.chain.check_block(self.block) is BlockCheck.OK:
-                    reward_act = Reward(self.chain.reward(), self.block.dict_hash())
-                    reward_trans = Transaction(from_adr=None, to_adr=self.block.pow.solver, act=reward_act, hash=None, sign=None)
-                    self.cache_trans(reward_trans)
+            # check and send
+            if self.chain.check_block(self.block) is BlockCheck.OK:
+                reward_act = Reward(self.chain.reward(), self.block.dict_hash())
+                reward_trans = Transaction(from_adr=None, to_adr=self.block.pow.solver, act=reward_act, hash=None, sign=None)
+                self.cache_trans(reward_trans)
 
-                    self.net.send({'trans': reward_trans.to_dict()})
-                    self.net.send({'block': self.block.to_dict()})
+                await self.net.send({'trans': reward_trans.to_dict()})
+                await self.net.send({'block': self.block.to_dict()})
 
-                if self.chain.add_block(self.block):
-                    self._dict_to_disk(self.chain, 'blockchain.json')
+            if self.chain.add_block(self.block):
+                await self._dict_to_disk(self.chain, 'blockchain.json')
 
-    def serve_forever(self):
-        t = Thread(target=self.serve_mining)
+    async def serve_forever(self):
+        loop = asyncio.get_running_loop()
+        loop.create_task(self.serve_mining())
 
-        t.start()
-        super().serve_forever()
+        while True:
+            await super().serve_forever()
 
 
 if __name__ == '__main__':
@@ -227,6 +225,7 @@ if __name__ == '__main__':
     parser.add_argument('--adr',  type=str, default='127.0.0.1', help='server listen address (default: "127.0.0.1")')
     parser.add_argument('--trans', nargs=3, metavar=('to', 'act', 'args'), help='make a transaction')
     parser.add_argument('--bal', action='store_true', help='get user balance')
+    parser.add_argument('--debg', action='store_true', help='debug mode (use with \'python3 -i\' flag)')
 
     args = parser.parse_args()
 
@@ -248,7 +247,7 @@ if __name__ == '__main__':
     if args.trans:
         to = args.trans[0]
         act_args = args.trans[2]
- 
+
         act = {
             'ivc': lambda: Invoice(int(act_args)),
             'pay': lambda: Payment(int(act_args)),
@@ -262,4 +261,5 @@ if __name__ == '__main__':
             exit()
 
     # serve
-    serv.serve_forever()
+    if not args.debg:
+        asyncio.run(serv.serve_forever())

@@ -2,6 +2,7 @@ import zlib
 import json
 import base58
 import socket
+import asyncio
 import hashlib as hlib
 
 from functools import reduce
@@ -326,7 +327,7 @@ class Blockchain(DataHashable):
         return block_prev.h_diff + int(self.blocks_count() % 10000 == 0)
 
     def get_trans(self, trans_hash):
-            return [block.trans[trans_hash] for block in self.blocks.values() if block.trans.get(trans_hash)]
+        return [block.trans[trans_hash] for block in self.blocks.values() if block.trans.get(trans_hash)]
 
     def get_bal(self, usr_pub):
         def filt(trans):
@@ -336,7 +337,7 @@ class Blockchain(DataHashable):
                 elif trans.from_adr == usr_pub:
                     return -trans.act.pay
             elif isinstance(trans.act, Reward) and trans.to_adr == usr_pub:
-                    return trans.act.rew
+                return trans.act.rew
 
         return sum(filt(trans) for block in self.blocks.values() for trans in block.trans.values())
 
@@ -430,6 +431,8 @@ class Net(DataHashable):
     def __post_init__(self):
         self.ipv6 = self.get_ipv6()
         self.sock = socket.create_server(('::0', 10000), family=socket.AF_INET6)
+        self.sock.setblocking(False)
+
         super().__post_init__()
 
     def add_peer(self, peer):
@@ -447,36 +450,47 @@ class Net(DataHashable):
     def get_ipv6(self):
         # google dns
         with socket.socket(socket.AF_INET6, socket.SOCK_DGRAM) as sock:
-            sock.connect(("2001:4860:4860::8888", 80))
+            sock.connect(('2001:4860:4860::8888', 80))
             return sock.getsockname()[0]
 
-    def send(self, data_dict):
+    async def send(self, data_dict):
         data_json = json.dumps(data_dict).encode()
         data_comp = zlib.compress(data_json)
 
         for peer in self.peers:
             if peer.ipv6 == self.ipv6:
-                continue
- 
-            try:
-                with socket.create_connection((peer.ipv6, peer.port), timeout=5) as sock:
-                    sock.sendall(data_comp)
-            except Exception:
+                await asyncio.sleep(0)
                 continue
 
-    def recv(self):
-        sock, _ = self.sock.accept()
+            try:
+                _, writer = await asyncio.open_connection(peer.ipv6, peer.port, family=socket.AF_INET6)
+                writer.write(data_comp)
+                await writer.drain()
+                writer.close()
+            except (ConnectionError, TimeoutError, OSError):
+                await asyncio.sleep(0)
+                continue
+
+    async def recv(self, client, hlr):
+        loop = asyncio.get_running_loop()
         data_comp = b''
 
         while True:
-            tmp = sock.recv(1024)
+            tmp = await loop.sock_recv(client, 1024)
             if not tmp:
                 break
             data_comp += tmp
 
         data_json = zlib.decompress(data_comp).decode()
         data = json.loads(data_json)
-        return data
+    
+        await hlr(data)
+
+    async def handle(self, hlr):
+        loop = asyncio.get_running_loop()
+
+        client, _ = await loop.sock_accept(self.sock)
+        loop.create_task(self.recv(client, hlr))
 
     def __del__(self):
         self.sock.close()

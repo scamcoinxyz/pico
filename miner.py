@@ -1,3 +1,4 @@
+import asyncio
 from sympy.ntheory import factorint
 
 
@@ -7,9 +8,11 @@ class MinerBackend:
     def __init__(self, backend):
         self.backend = backend
 
-    def factorint(self, num):
+    async def factorint(self, num):
+        loop = asyncio.get_running_loop()
+
         if self.backend == MinerBackend.MINER_BACKEND_SYMPY:
-            return factorint(num)
+            return await loop.run_in_executor(None, factorint, num)
         raise NotImplementedError()
 
 
@@ -21,10 +24,10 @@ class Miner:
     def set_block(self, block):
         self.block = block
 
-    def work(self):
+    async def work(self):
         for i in range(self.block.v_diff):
             num = self.block.pow.extract(i)
-            factors = self.backend.factorint(num)
+            factors = await self.backend.factorint(num)
 
             self.block.add_pow(num, factors)
             print(f'solved {i + 1}/{self.block.v_diff}')
