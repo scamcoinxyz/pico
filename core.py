@@ -430,10 +430,13 @@ class Net(DataHashable):
 
     def __post_init__(self):
         self.ipv6 = self.get_ipv6()
-        self.sock = socket.create_server(('::0', 10000), family=socket.AF_INET6)
-        self.sock.setblocking(False)
-
+        self.hlr = None
+        self.serv = None
         super().__post_init__()
+
+    def serv_init(self, hlr):
+        self.serv = asyncio.start_server(self.recv, '::0', 10000, family=socket.AF_INET6)
+        self.hlr = hlr
 
     def add_peer(self, peer):
         self.peers.append(peer)
@@ -471,12 +474,11 @@ class Net(DataHashable):
                 await asyncio.sleep(0)
                 continue
 
-    async def recv(self, client, hlr):
-        loop = asyncio.get_running_loop()
+    async def recv(self, client, _):
         data_comp = b''
 
         while True:
-            tmp = await loop.sock_recv(client, 1024)
+            tmp = await client.read(1024)
             if not tmp:
                 break
             data_comp += tmp
@@ -484,13 +486,4 @@ class Net(DataHashable):
         data_json = zlib.decompress(data_comp).decode()
         data = json.loads(data_json)
     
-        await hlr(data)
-
-    async def handle(self, hlr):
-        loop = asyncio.get_running_loop()
-
-        client, _ = await loop.sock_accept(self.sock)
-        loop.create_task(self.recv(client, hlr))
-
-    def __del__(self):
-        self.sock.close()
+        await self.hlr(data)

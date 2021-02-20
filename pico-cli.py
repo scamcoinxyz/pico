@@ -144,8 +144,13 @@ class CoreServer(CLI):
                 await hlr(data[key])
 
     async def serve_forever(self):
+        self.net.serv_init(self.serve_dispatch)
+
+        loop = asyncio.get_running_loop()
+        loop.create_task(self.net.serv)
+
         while True:
-            await self.net.handle(self.serve_dispatch)
+            await asyncio.sleep(0)
 
 
 class MiningServer(CoreServer):
