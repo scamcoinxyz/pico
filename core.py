@@ -1,9 +1,9 @@
-import zlib
-import json
-import base58
-import socket
-import asyncio
-import hashlib as hlib
+import zlib # gzip 과 호환되는 압축 라이브러리
+import json # json 형식을 읽고쓰게 해주는 라이브러리
+import base58 # 문자열을 base58 로 인코딩하는 라이브러리
+import socket #이 모듈은 BSD socket 인터페이스에 대한 액세스를 제공합니다. 모든 현대 유닉스 시스템, 윈도우, MacOS, 그리고 아마 추가 플랫폼에서 사용할 수 있습니다. 호출이 운영 체제 소켓 API로 이루어지기 때문에, 일부 동작은 플랫폼에 따라 다를 수 있습니다.
+import asyncio #asyncio는 async/await 구문을 사용하여 동시성 코드를 작성하는 라이브러리입니다.
+import hashlib as hlib # hash 알고리즘을 담고 있는 라이브러리
 
 from functools import reduce
 from datetime import datetime as dt
@@ -14,19 +14,24 @@ from Crypto.Cipher import AES
 from sympy.ntheory import isprime
 from ecdsa import SigningKey, VerifyingKey, SECP256k1
 
-
+# dataclass 데코레이터를 일반 클래스에 선언해주면 __init, __repr, __eq 이런 메서드를 자동으로 생성해줌.
 @dataclass
 class DataHashable:
     hash: Optional[str]
 
     def __post_init__(self):
         self.hash = self.dict_hash() if self.hash is None else self.hash
+        # if self.hash == None:
+        #   self.hash = self.dict_hash()
+        # else:
+        #   self.hash = self.hash
 
     def to_dict_without_hash(self):
         return {k: v for k, v in asdict(self).items() if k != 'hash'}
 
     def to_dict(self):
         self_dict = asdict(self)
+        # asdict : 클래스를 딕셔너리로 변환해서 반환.
         self_dict['hash'] = self.hash
         return self_dict
 
