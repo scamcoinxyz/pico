@@ -1,3 +1,9 @@
 blockchain.json
 user.json
 peers.json
+
+venv
+
+__pycache__
+
+.DS_STORE
