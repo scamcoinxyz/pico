@@ -9,6 +9,9 @@ import hashlib as hlib  # hash 알고리즘을 담고 있는 라이브러리
 from functools import reduce
 from datetime import datetime as dt
 from typing import Union, Optional, Dict, List
+# typing 은 파이썬 변수에 타입 힌트를 줄 수 있다.
+# Union[int, str]는 해당 변수가 int 또는 str 이라는것
+# Optional[str] 은 해당 변수가 str 또는 None 이라는것. Union[str, None]과 같다.
 from dataclasses import dataclass, asdict, field
 
 from Crypto.Cipher import AES
