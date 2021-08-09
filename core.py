@@ -1,9 +1,10 @@
-import zlib # gzip 과 호환되는 압축 라이브러리
-import json # json 형식을 읽고쓰게 해주는 라이브러리
-import base58 # 문자열을 base58 로 인코딩하는 라이브러리
-import socket #이 모듈은 BSD socket 인터페이스에 대한 액세스를 제공합니다. 모든 현대 유닉스 시스템, 윈도우, MacOS, 그리고 아마 추가 플랫폼에서 사용할 수 있습니다. 호출이 운영 체제 소켓 API로 이루어지기 때문에, 일부 동작은 플랫폼에 따라 다를 수 있습니다.
-import asyncio #asyncio는 async/await 구문을 사용하여 동시성 코드를 작성하는 라이브러리입니다.
-import hashlib as hlib # hash 알고리즘을 담고 있는 라이브러리
+import zlib  # gzip 과 호환되는 압축 라이브러리
+import json  # json 형식을 읽고쓰게 해주는 라이브러리
+import base58  # 문자열을 base58 로 인코딩하는 라이브러리
+# 이 모듈은 BSD socket 인터페이스에 대한 액세스를 제공합니다. 모든 현대 유닉스 시스템, 윈도우, MacOS, 그리고 아마 추가 플랫폼에서 사용할 수 있습니다. 호출이 운영 체제 소켓 API로 이루어지기 때문에, 일부 동작은 플랫폼에 따라 다를 수 있습니다.
+import socket
+import asyncio  # asyncio는 async/await 구문을 사용하여 동시성 코드를 작성하는 라이브러리입니다.
+import hashlib as hlib  # hash 알고리즘을 담고 있는 라이브러리
 
 from functools import reduce
 from datetime import datetime as dt
@@ -14,13 +15,15 @@ from Crypto.Cipher import AES
 from sympy.ntheory import isprime
 from ecdsa import SigningKey, VerifyingKey, SECP256k1
 
+
 # dataclass 데코레이터를 일반 클래스에 선언해주면 __init, __repr, __eq 이런 메서드를 자동으로 생성해줌.
 @dataclass
 class DataHashable:
     hash: Optional[str]
 
     def __post_init__(self):
-        self.hash = self.dict_hash() if self.hash is None else self.hash
+        self.hash = self.dict_hash()
+        # 한줄짜리 if else 문 if self.hash is None else self.hash 은 아래와 같다.
         # if self.hash == None:
         #   self.hash = self.dict_hash()
         # else:
@@ -103,7 +106,8 @@ class User(DataHashable):
         h = hlib.sha3_256(password.encode())
         cipher = AES.new(h.digest(), AES.MODE_GCM, nonce=e_priv_raw[0:16])
 
-        priv_raw = cipher.decrypt_and_verify(e_priv_raw[16:48], e_priv_raw[48:64])
+        priv_raw = cipher.decrypt_and_verify(
+            e_priv_raw[16:48], e_priv_raw[48:64])
 
         return base58.b58encode(priv_raw).decode()
 
@@ -432,6 +436,9 @@ class Peer:
 @dataclass
 class Net(DataHashable):
     peers: List[Peer] = field(default_factory=list)
+    # dataclass 에서 list 같은 가변형 데이터는 초기값을 바로 할당할수가 없음.
+    # peers: List[Peer] = [] -> error!
+    # 그래서 함수 field(default_factory=list)를 사용하면 기본값 []을 할당할 수 있음.
 
     def __post_init__(self):
         self.ipv6 = self.get_ipv6()
@@ -440,7 +447,8 @@ class Net(DataHashable):
         super().__post_init__()
 
     def serv_init(self, hlr):
-        self.serv = asyncio.start_server(self.recv, '::0', 10000, family=socket.AF_INET6)
+        self.serv = asyncio.start_server(
+            self.recv, '::0', 10000, family=socket.AF_INET6)
         self.hlr = hlr
 
     def add_peer(self, peer):
@@ -490,5 +498,5 @@ class Net(DataHashable):
 
         data_json = zlib.decompress(data_comp).decode()
         data = json.loads(data_json)
-    
+
         await self.hlr(data)
